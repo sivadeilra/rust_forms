@@ -1,0 +1,6 @@
+[workspace] 
+members = [
+    "examples/hello",
+    "forms",
+    "forms2",
+]
