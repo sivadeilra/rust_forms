@@ -9,6 +9,13 @@ pub struct ListView {
     control: Control,
 }
 
+impl core::ops::Deref for ListView {
+    type Target = Control;
+    fn deref(&self) -> &Control {
+        &self.control
+    }
+}
+
 impl ListView {
 
     /*

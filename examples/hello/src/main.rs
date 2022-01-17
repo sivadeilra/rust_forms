@@ -10,11 +10,9 @@ struct AppState {
 fn main() {
     env_logger::init();
 
-    let app = App::new();
-
     let apps: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState {
         paths: vec![
-            r"d:\temp\".to_string(),
+            r"d:\temp".to_string(),
             r"c:\windows\fonts".to_string(),
             r"d:\os\src".to_string(),
         ],
@@ -27,19 +25,42 @@ fn main() {
         .text("Hello, World")
         .build();
 
+    f.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
+    f.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
+
     let lv = ListView::new(&f);
 
     lv.set_view(Mode::Details);
     lv.set_full_row_select(true);
     lv.set_grid_lines(true);
     lv.set_check_boxes(true);
+    lv.set_double_buffer(true);
     lv.add_column(0, 200, "Stuff");
     lv.add_column(1, 80, "More stuff");
 
     lv.insert_item("Hello");
     lv.insert_item("World");
 
-    let start = Button::new(&f);
+    let edit = TextBox::new(
+        &f,
+        &Rect {
+            top: 10,
+            left: 500,
+            right: 500 + 200,
+            bottom: 10 + 30,
+        },
+    );
+    edit.set_text("some path");
+
+    let start = Button::new(
+        &f,
+        &Rect {
+            top: 50,
+            left: 500,
+            right: 500 + 200,
+            bottom: 50 + 30,
+        },
+    );
     start.set_text("Start Your Engine");
 
     start.on_clicked(EventHandler::new({
@@ -47,7 +68,9 @@ fn main() {
         let apps = apps.clone();
         let lv = lv.clone();
         move |()| {
-            println!("clicked!");
+            let path_edit = edit.get_text();
+            println!("path: {}", path_edit);
+
             let mut apps = apps.borrow_mut();
             let next_dir = apps.paths[apps.next_path].clone();
             apps.next_path = (apps.next_path + 1) % apps.paths.len();
@@ -56,10 +79,9 @@ fn main() {
         }
     }));
 
-    // f.set_title("Hello, world");
     f.show_window();
 
-    app.run();
+    event_loop();
 }
 
 fn load_directory(f: &Form, lv: &ListView, path: &str) {

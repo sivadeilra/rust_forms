@@ -4,11 +4,18 @@ use widestring::U16CString;
 
 #[derive(Clone)]
 pub struct ListView {
+    control: Control,
     state: Rc<ListViewState>,
 }
 
+impl core::ops::Deref for ListView {
+    type Target = Control;
+    fn deref(&self) -> &Control {
+        &self.control
+    }
+}
+
 struct ListViewState {
-    control: Rc<ControlState>,
     handlers: RefCell<Vec<ListViewHandler>>,
 }
 
@@ -16,20 +23,21 @@ const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
     fn handle(&self) -> HWND {
-        self.state.control.handle
+        self.control.handle()
     }
 
-    pub fn new(form: &Form) -> Self {
+    pub fn set_visible(&self, value: bool) {
+        let style = self.control.state.get_window_style();
+        let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { 0 });
+        self.control.state.set_window_style(new_style);
+    }
+
+    pub fn new(form: &Form, rect: &Rect) -> Self {
         unsafe {
             let parent_window = form.handle();
 
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
-
-            let x = 0;
-            let y = 0;
-            let nwidth = 300;
-            let nheight = 300;
 
             let ex_style = 0;
 
@@ -38,10 +46,10 @@ impl ListView {
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
                 WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER,
-                x,
-                y,
-                nwidth,
-                nheight,
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
                 parent_window,
                 0 as HMENU,     // hmenu,
                 get_instance(), // hinstance,
@@ -54,22 +62,23 @@ impl ListView {
 
             debug!("created list view window 0x{:x}", windowHandle);
 
-            let control = Rc::new(ControlState {
-                controls: Vec::new(),
-                // parent: Rc::downgrade(&form.state),
-                handle: windowHandle,
-                layout: ControlLayout::default(),
-                form: Rc::downgrade(&form.state),
-            });
+            let control = Control {
+                state: Rc::new(ControlState {
+                    controls: Vec::new(),
+                    // parent: Rc::downgrade(&form.state),
+                    handle: windowHandle,
+                    layout: RefCell::new(ControlLayout::default()),
+                    form: Rc::downgrade(&form.state),
+                }),
+            };
 
             let state: Rc<ListViewState> = Rc::new(ListViewState {
                 handlers: RefCell::new(Vec::new()),
-                control: control,
             });
             form.state.invalidate_layout();
-            let mut controls = form.state.controls.borrow_mut();
+            // let mut controls = form.state.controls.borrow_mut();
             // controls.insert(this.handle(), Rc::clone(&this));
-            Self { state }
+            Self { control, state }
         }
     }
 
@@ -82,7 +91,7 @@ impl ListView {
             col.cx = width;
             col.pszText = PWSTR(textw.as_ptr() as *mut u16);
             SendMessageW(
-                self.state.control.handle,
+                self.control.handle(),
                 LVM_INSERTCOLUMNW,
                 index as WPARAM,
                 &col as *const LVCOLUMNW as LPARAM,
@@ -98,21 +107,14 @@ impl ListView {
     // https://docs.microsoft.com/en-us/windows/win32/controls/extended-list-view-styles
 
     fn get_ex_style(&self) -> u32 {
-        unsafe {
-            SendMessageW(
-                self.state.control.handle,
-                LVM_GETEXTENDEDLISTVIEWSTYLE,
-                0,
-                0,
-            ) as u32
-        }
+        unsafe { SendMessageW(self.control.handle(), LVM_GETEXTENDEDLISTVIEWSTYLE, 0, 0) as u32 }
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-setextendedlistviewstyle
     fn set_ex_style(&self, mask: u32, values: u32) {
         unsafe {
             SendMessageW(
-                self.state.control.handle,
+                self.control.handle(),
                 LVM_SETEXTENDEDLISTVIEWSTYLE,
                 mask as WPARAM,
                 values as LPARAM,
@@ -145,21 +147,15 @@ impl ListView {
     }
 
     pub fn set_multi_select(&self, value: bool) {
-        self.state
-            .control
-            .set_window_style_flag(LVS_SINGLESEL, !value);
+        self.control.state.set_window_style_flag(LVS_SINGLESEL, !value);
     }
 
     pub fn set_show_sort_header(&self, value: bool) {
-        self.state
-            .control
-            .set_window_style_flag(LVS_NOSORTHEADER, !value);
+        self.control.state.set_window_style_flag(LVS_NOSORTHEADER, !value);
     }
 
     pub fn set_edit_labels(&self, value: bool) {
-        self.state
-            .control
-            .set_window_style_flag(LVS_EDITLABELS, value);
+        self.control.state.set_window_style_flag(LVS_EDITLABELS, value);
     }
 
     /// Sets all items to the not-selected state.
@@ -292,7 +288,7 @@ impl ListView {
     pub fn set_view(&self, mode: Mode) {
         unsafe {
             let result = SendMessageW(self.handle(), LVM_SETVIEW, mode.to_native() as WPARAM, 0);
-            debug!("LV_SETVIEW result: {}", result);
+            // debug!("LV_SETVIEW result: {}", result);
         }
     }
 

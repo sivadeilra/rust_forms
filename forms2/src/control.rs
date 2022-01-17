@@ -1,13 +1,14 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct Control {
-    pub(crate) state: Rc<UnsafeCell<ControlState>>,
+    pub(crate) state: Rc<ControlState>,
 }
 
 static_assertions::assert_not_impl_any!(Control: Send, Sync);
 
 pub(crate) struct ControlState {
-    pub(crate) layout: ControlLayout,
+    pub(crate) layout: RefCell<ControlLayout>,
     pub(crate) form: Weak<FormState>,
     // pub(crate) parent: Weak<ControlState>,
     pub(crate) controls: Vec<Rc<ControlState>>,
@@ -38,22 +39,10 @@ impl Default for ControlLayout {
 
 impl Control {
     pub(crate) fn handle(&self) -> HWND {
-        unsafe { self.state_ref().handle }
+        self.state.handle
     }
 
-    unsafe fn state_ref(&self) -> &ControlState {
-        &*self.state.get()
-    }
-
-    unsafe fn state_mut(&self) -> &mut ControlState {
-        &mut *self.state.get()
-    }
-
-    pub fn set_fixed_layout(self, size: Size, pos: Point) {
-        unsafe {
-            let state = self.state_mut();
-        }
-    }
+    pub fn set_fixed_layout(self, size: Size, pos: Point) {}
 
     pub fn set_min_size(&self, min_size: Option<Size>) {}
     pub fn set_max_size(&self, max_size: Option<Size>) {}
@@ -61,28 +50,28 @@ impl Control {
     /// Sets the grid layout parameters for this control. This is only meaningful
     /// if the layout context is Grid.
     pub fn set_grid_layout(&self, row: i32, row_span: i32, col: i32, col_span: i32) {
-        unsafe {
-            let state = self.state_mut();
-            state.layout.grid_row = row;
-            state.layout.grid_row_span = row_span;
-            state.layout.grid_col = col;
-            state.layout.grid_col_span = col_span;
-            if let Some(form) = state.form.upgrade() {
-                form.invalidate_layout();
-            }
+        let mut layout = self.state.layout.borrow_mut();
+        layout.grid_row = row;
+        layout.grid_row_span = row_span;
+        layout.grid_col = col;
+        layout.grid_col_span = col_span;
+        drop(layout);
+
+        if let Some(form) = self.state.form.upgrade() {
+            form.invalidate_layout();
         }
     }
 
     /// Sets the grid layout parameters for this control. This is only meaningful
     /// if the layout context is Grid.
     pub fn set_grid_alignment(&self, horizontal: HorizontalAlignment, vertical: VerticalAlignment) {
-        unsafe {
-            let state = self.state_mut();
-            state.layout.grid_horizontal_alignment = horizontal;
-            state.layout.grid_vertical_alignment = vertical;
-            if let Some(form) = state.form.upgrade() {
-                form.invalidate_layout();
-            }
+        let mut layout = self.state.layout.borrow_mut();
+        layout.grid_horizontal_alignment = horizontal;
+        layout.grid_vertical_alignment = vertical;
+        drop(layout);
+
+        if let Some(form) = self.state.form.upgrade() {
+            form.invalidate_layout();
         }
     }
 }
@@ -135,3 +124,13 @@ impl ControlState {
         self.set_window_style_bits(mask, if value { mask } else { 0 });
     }
 }
+
+#[derive(Default)]
+pub struct CreateControlOptions {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+

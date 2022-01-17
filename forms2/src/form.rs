@@ -4,10 +4,12 @@ use core::ptr::null_mut;
 use log::debug;
 use std::sync::Once;
 
-mod builder;
-pub use builder::*;
-
 mod bg;
+mod builder;
+mod pipe;
+
+pub use builder::*;
+pub use pipe::Sender;
 
 /// A top-level window.
 ///
@@ -37,6 +39,11 @@ pub(crate) struct FormState {
     pub(crate) notify_handlers: RefCell<HashMap<HWND, NotifyHandler>>,
 
     pub(crate) event_handlers: RefCell<HashMap<HWND, Rc<dyn MessageHandlerTrait>>>,
+
+    pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
+    pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
+
+    pub(crate) receivers: RefCell<Vec<Rc<dyn pipe::QueueReceiver>>>,
 }
 
 pub(crate) trait MessageHandlerTrait: 'static {
@@ -86,9 +93,26 @@ impl Form {
             set_window_text(self.state.handle.get(), text);
         }
     }
+
+    pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
+        self.state.default_edit_font.set(font);
+    }
+
+    pub fn get_default_edit_font(&self) -> Option<Rc<Font>> {
+        clone_cell_opt_rc(&self.state.default_edit_font)
+    }
+
+    pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
+        self.state.default_button_font.set(font);
+    }
+
+    pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
+        clone_cell_opt_rc(&self.state.default_button_font)
+    }
 }
 
 const FORM_WM_BACKGROUND_COMPLETION: u32 = WM_USER + 0;
+const FORM_WM_POLL_PIPE_RECEIVERS: u32 = WM_USER + 1;
 
 impl FormState {
     pub(crate) fn invalidate_layout(&self) {
@@ -199,13 +223,19 @@ extern "system" fn form_wndproc(
             WM_SIZE => {
                 let new_width = (lparam & 0xffff) as u32;
                 let new_height = ((lparam >> 16) & 0xffff) as u32;
-                debug!("WM_SIZE: {} x {}", new_width, new_height);
+                trace!("WM_SIZE: {} x {}", new_width, new_height);
                 return 0;
             }
 
             FORM_WM_BACKGROUND_COMPLETION => {
-                debug!("FORM_WM_BACKGROUND_COMPLETION");
+                trace!("FORM_WM_BACKGROUND_COMPLETION");
                 Form::finish_background(lparam);
+                return 0;
+            }
+
+            FORM_WM_POLL_PIPE_RECEIVERS => {
+                trace!("FORM_WM_POLL_PIPE_RECEIVERS");
+                state.poll_receivers();
                 return 0;
             }
 

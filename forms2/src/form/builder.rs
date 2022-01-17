@@ -78,6 +78,9 @@ impl<'a> FormBuilder<'a> {
                 is_layout_valid: Cell::new(false),
                 notify_handlers: RefCell::new(HashMap::new()),
                 event_handlers: RefCell::new(HashMap::new()),
+                default_edit_font: Default::default(),
+                default_button_font: Default::default(),
+                receivers: Default::default(),
             });
 
             let form_alloc_ptr: *const FormState = &*form_alloc;

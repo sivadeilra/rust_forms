@@ -1,26 +1,29 @@
 use super::*;
 
 pub struct Button {
+    control: Control,
     state: Rc<ButtonState>,
 }
 
+impl core::ops::Deref for Button {
+    type Target = Control;
+    fn deref(&self) -> &Control {
+        &self.control
+    }
+}
+
 pub(crate) struct ButtonState {
-    control: ControlState,
+    font: Cell<Option<Rc<Font>>>,
     on_click: Cell<Option<Rc<EventHandler<()>>>>,
 }
 
 impl Button {
-    pub fn new(form: &Form) -> Self {
+    pub fn new(form: &Form, rect: &Rect) -> Self {
         unsafe {
             let parent_window = form.handle();
 
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("BUTTON");
-
-            let x = 0;
-            let y = 450;
-            let nwidth = 300;
-            let nheight = 50;
 
             let ex_style = 0;
 
@@ -29,10 +32,10 @@ impl Button {
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
                 WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER,
-                x,
-                y,
-                nwidth,
-                nheight,
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
                 parent_window,
                 0 as HMENU,     // hmenu,
                 get_instance(), // hinstance,
@@ -45,18 +48,20 @@ impl Button {
 
             debug!("created list view window 0x{:x}", windowHandle);
 
-            let control = ControlState {
-                controls: Vec::new(),
-                handle: windowHandle,
-                layout: ControlLayout::default(),
-                form: Rc::downgrade(&form.state),
+            let control = Control {
+                state: Rc::new(ControlState {
+                    controls: Vec::new(),
+                    handle: windowHandle,
+                    layout: RefCell::new(ControlLayout::default()),
+                    form: Rc::downgrade(&form.state),
+                }),
             };
 
             form.state.invalidate_layout();
 
             let mut state = Rc::new(ButtonState {
-                control,
                 on_click: Cell::new(None),
+                font: Default::default(),
             });
 
             {
@@ -66,12 +71,26 @@ impl Button {
             }
 
             let mut controls = form.state.controls.borrow_mut();
-            Self { state }
+            let this = Self { control, state };
+
+            if let Some(font) = form.get_default_button_font() {
+                this.set_font(font);
+            }
+
+            this
+        }
+    }
+
+    pub fn set_font(&self, font: Rc<Font>) {
+        trace!("edit: setting font");
+        unsafe {
+            SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
+            self.state.font.set(Some(font));
         }
     }
 
     pub fn set_text(&self, text: &str) {
-        set_window_text(self.state.control.handle, text);
+        set_window_text(self.control.handle(), text);
     }
 
     pub fn on_clicked(&self, handler: EventHandler<()>) {

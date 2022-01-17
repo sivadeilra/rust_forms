@@ -1,21 +1,23 @@
 use super::*;
 
 pub struct TextBox {
+    control: Control,
     state: Rc<TextBoxState>,
 }
 
-pub(crate) struct TextBoxState {}
+pub(crate) struct TextBoxState {
+    font: Cell<Option<Rc<Font>>>,
+}
 
 impl core::ops::Deref for TextBox {
     type Target = Control;
     fn deref(&self) -> &Control {
-        todo!(); // &self.control
+        &self.control
     }
 }
 
 impl TextBox {
     pub fn new(parent: &Form, rect: &Rect) -> TextBox {
-        /*
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
 
@@ -30,7 +32,7 @@ impl TextBox {
                 rect.top,
                 rect.right - rect.left,
                 rect.bottom - rect.top,
-                Some(parent.handle.handle()),
+                Some(parent.state.handle.get()),
                 None,       // menu
                 None,       // instance
                 null_mut(), // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
@@ -40,26 +42,42 @@ impl TextBox {
                 panic!("Failed to create window");
             }
 
-            TextBox {
-                control: Control::from_handle(WindowHandle::from_handle(handle)),
+            let control = Control {
+                state: Rc::new(ControlState {
+                    controls: Default::default(),
+                    form: Rc::downgrade(&parent.state),
+                    handle,
+                    layout: Default::default(),
+                }),
+            };
+
+            let this = TextBox {
+                control,
+                state: Rc::new(TextBoxState {
+                    font: Default::default(),
+                }),
+            };
+
+            if let Some(font) = parent.get_default_edit_font() {
+                this.set_font(font);
             }
+
+            this
         }
-        */
-        todo!();
+    }
+
+    pub fn set_font(&self, font: Rc<Font>) {
+        unsafe {
+            SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
+            self.state.font.set(Some(font));
+        }
     }
 
     pub fn set_text(&self, s: &str) {
-        /*
-        unsafe {
-            let s_wstr: U16CString = U16CString::from_str(s).unwrap();
-            SendMessageW(
-                self.control.handle(),
-                WM_SETTEXT,
-                0,
-                s_wstr.as_ptr() as LPARAM,
-            );
-        }
-        */
-        todo!();
+        set_window_text(self.control.handle(), s);
+    }
+
+    pub fn get_text(&self) -> String {
+        get_window_text(self.control.handle())
     }
 }
