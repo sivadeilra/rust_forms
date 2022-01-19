@@ -149,7 +149,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "forms2"
+name = "forms"
 version = "0.1.0"
 dependencies = [
  "env_logger",
@@ -229,7 +229,7 @@ name = "hello"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "forms2",
+ "forms",
  "log",
 ]
 
@@ -826,7 +826,7 @@ name = "trace_view"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "forms2",
+ "forms",
  "log",
  "regex",
  "reqwest",

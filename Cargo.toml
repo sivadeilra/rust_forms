@@ -2,5 +2,5 @@
 members = [
     "examples/hello",
     "examples/trace_view",
-    "forms2",
+    "forms",
 ]
