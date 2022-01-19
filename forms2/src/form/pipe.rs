@@ -1,9 +1,20 @@
-use std::collections::VecDeque;
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc;
-use std::sync::{atomic::Ordering::SeqCst, Arc, Mutex};
-
 use super::*;
+use core::marker::PhantomData;
+use std::collections::VecDeque;
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+
+/// Allows a value (that does not implement `Send`) to be passed from a UI
+/// thread to a different thread. The smuggled object can only be opened on
+/// the same original thread that created the smuggled object.
+///
+/// If the `Drop` handler for this type runs, then the contained value is leaked.
+/// This is required because the contained value can only safely be used on its
+/// original thread.
+#[cfg(todo)]
+pub struct Smuggled<T> {
+    cell: core::mem::MaybeUninit<T>,
+}
 
 impl Form {
     pub fn register_receiver_func<M, F>(&self, debug_description: &str, handler: F) -> Sender<M>
@@ -11,9 +22,7 @@ impl Form {
         M: Send + 'static,
         F: Fn(M) + 'static,
     {
-        use core::marker::PhantomData;
-
-        struct MessageHandler<F, M>
+        struct FuncMessageReceiver<F, M>
         where
             F: Fn(M) + 'static,
         {
@@ -21,7 +30,7 @@ impl Form {
             fake: PhantomData<M>,
         }
 
-        impl<F, M> MessageReceiver<M> for MessageHandler<F, M>
+        impl<F, M> MessageReceiver<M> for FuncMessageReceiver<F, M>
         where
             M: Send + 'static,
             F: Fn(M) + 'static,
@@ -33,11 +42,62 @@ impl Form {
 
         self.register_receiver::<M>(
             debug_description,
-            Rc::new(MessageHandler::<F, M> {
+            Rc::new(FuncMessageReceiver::<F, M> {
                 f: handler,
                 fake: PhantomData,
             }),
         )
+    }
+
+    /// Creates a worker thread and a channel from the UI thread to that worker
+    /// thread. The caller provides the implementation of the worker thread.
+    ///
+    /// This creates a half-duplex channel. The UI thread can send messages to
+    /// the worker thread, but no facility is provided for receiving responses.
+    pub fn create_worker_thread_half_duplex<M, W>(
+        &self,
+        _debug_description: &str,
+        worker: W,
+    ) -> mpsc::Sender<M>
+    where
+        M: Send + 'static,
+        W: Send + 'static + FnOnce(mpsc::Receiver<M>),
+    {
+        let (tx, rx) = mpsc::channel::<M>();
+
+        let _joiner = std::thread::spawn(move || {
+            worker(rx);
+        });
+
+        tx
+    }
+
+    /// Creates a worker thread, a command channel (to send commands to the
+    /// worker thread) and a response channel.
+    ///
+    /// * `M`: type of messages sent to the worker
+    /// * `W`: worker implementation
+    /// * `R`: type of messages sent in response
+    pub fn create_worker_thread_full_duplex<Command, Response, Worker>(
+        &self,
+        debug_description: &str,
+        worker: Worker,
+        response_handler: Rc<dyn MessageReceiver<Response>>,
+    ) -> mpsc::Sender<Command>
+    where
+        Command: Send + 'static,
+        Response: Send + 'static,
+        Worker: Send + 'static + FnOnce(mpsc::Receiver<Command>, Sender<Response>),
+    {
+        let response_tx = self.register_receiver::<Response>(debug_description, response_handler);
+
+        let (command_tx, command_rx) = mpsc::channel::<Command>();
+
+        let _joiner = std::thread::spawn(move || {
+            worker(command_rx, response_tx);
+        });
+
+        command_tx
     }
 
     pub fn register_receiver<M>(
@@ -50,9 +110,6 @@ impl Form {
     {
         let queue_state = Arc::new(QueueState::<M> {
             messages: Mutex::new(VecDeque::new()),
-            closed: AtomicBool::new(false),
-            receiver_running: AtomicBool::new(false),
-            // receiver: receiver_box_raw,
             hwnd: self.state.handle.get(),
         });
 
@@ -78,7 +135,7 @@ impl FormState {
     pub(crate) fn poll_receivers(&self) {
         let mut i = 0;
         loop {
-            let mut receivers = self.receivers.borrow();
+            let receivers = self.receivers.borrow();
             if i >= receivers.len() {
                 break;
             }
@@ -102,21 +159,18 @@ pub(crate) trait QueueReceiver {
 impl<M> QueueReceiver for ReceiverUIState<M> {
     // This runs on the UI thread, when we receive FORM_WM_POLL_RECEIVERS.
     fn receive(&self) {
-        debug!("polling receiver: {}", self.debug_description);
-
-        // self.queue.receiver_running.store(true, SeqCst);
+        trace!("polling receiver: {}", self.debug_description);
         loop {
             let mut messages = self.queue.messages.lock().unwrap();
             if let Some(message) = messages.pop_front() {
                 drop(messages); // unlock -- very important!
-                trace!("received one message");
+                                // trace!("received one message");
                 self.handler.message(message);
             } else {
-                trace!("receiver done");
+                // trace!("receiver done");
                 break;
             }
         }
-        // self.queue.receiver_running.store(false, SeqCst);
     }
 }
 
@@ -129,8 +183,6 @@ struct ReceiverUIState<M> {
 
 struct QueueState<M> {
     messages: Mutex<VecDeque<M>>,
-    closed: AtomicBool,
-    receiver_running: AtomicBool,
     hwnd: HWND,
     // receiver: *mut dyn MessageReceiver<M>,
 }

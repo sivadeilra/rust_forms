@@ -1,27 +1,23 @@
 use super::*;
 
 pub struct TextBox {
-    control: Control,
-    state: Rc<TextBoxState>,
-}
-
-pub(crate) struct TextBoxState {
+    control: ControlState,
     font: Cell<Option<Rc<Font>>>,
 }
 
 impl core::ops::Deref for TextBox {
-    type Target = Control;
-    fn deref(&self) -> &Control {
+    type Target = ControlState;
+    fn deref(&self) -> &ControlState {
         &self.control
     }
 }
 
 impl TextBox {
-    pub fn new(parent: &Form, rect: &Rect) -> TextBox {
+    pub fn new(parent: &Form, rect: Option<&Rect>) -> Rc<TextBox> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
-
             let ex_style: u32 = 0;
+            let rect = rect_or_default(rect);
 
             let handle = CreateWindowExW(
                 ex_style,
@@ -42,21 +38,16 @@ impl TextBox {
                 panic!("Failed to create window");
             }
 
-            let control = Control {
-                state: Rc::new(ControlState {
-                    controls: Default::default(),
-                    form: Rc::downgrade(&parent.state),
-                    handle,
-                    layout: Default::default(),
-                }),
+            let control = ControlState {
+                form: Rc::downgrade(&parent.state),
+                handle,
+                layout: Default::default(),
             };
 
-            let this = TextBox {
+            let this = Rc::new(TextBox {
                 control,
-                state: Rc::new(TextBoxState {
-                    font: Default::default(),
-                }),
-            };
+                font: Default::default(),
+            });
 
             if let Some(font) = parent.get_default_edit_font() {
                 this.set_font(font);
@@ -69,7 +60,7 @@ impl TextBox {
     pub fn set_font(&self, font: Rc<Font>) {
         unsafe {
             SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
-            self.state.font.set(Some(font));
+            self.font.set(Some(font));
         }
     }
 

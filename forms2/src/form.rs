@@ -28,40 +28,37 @@ pub(crate) struct FormState {
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
 
-    /// True if the window has been created and is displayed.
-    is_visible: Cell<bool>,
-
     is_layout_valid: Cell<bool>,
+    layout_min_size: Cell<(i32, i32)>,
+
+    pub(crate) layout: RefCell<Option<Layout>>,
 
     /// Used for event routing.
-    pub(crate) controls: RefCell<HashMap<HWND, Control>>,
-
     pub(crate) notify_handlers: RefCell<HashMap<HWND, NotifyHandler>>,
-
     pub(crate) event_handlers: RefCell<HashMap<HWND, Rc<dyn MessageHandlerTrait>>>,
-
     pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
-
     pub(crate) receivers: RefCell<Vec<Rc<dyn pipe::QueueReceiver>>>,
 }
 
 pub(crate) trait MessageHandlerTrait: 'static {
     fn wm_command(&self, control_id: u16, notify_code: u16) -> LRESULT {
+        let _ = (control_id, notify_code);
         0
     }
 
     fn handle_message(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        let _ = (msg, wparam, lparam);
         0
     }
 }
 
 pub(crate) struct NotifyHandler {
-    handler: Rc<RefCell<dyn NotifyHandlerTrait>>,
+    pub(crate) handler: Rc<dyn NotifyHandlerTrait>,
 }
 
-trait NotifyHandlerTrait {
-    fn handle_message(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT;
+pub(crate) trait NotifyHandlerTrait {
+    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> LRESULT;
 }
 
 impl Form {
@@ -74,24 +71,14 @@ impl Form {
     }
 
     pub fn show_window(&self) {
+        self.state.ensure_layout_valid();
         unsafe {
             ShowWindow(self.handle(), SW_SHOW);
         }
     }
 
-    fn ensure_layout_valid(&self) {
-        if self.state.is_layout_valid.get() {
-            return;
-        }
-
-        // TODO: uhhhh, compute layout
-        self.state.is_layout_valid.set(true);
-    }
-
     pub fn set_title(&self, text: &str) {
-        unsafe {
-            set_window_text(self.state.handle.get(), text);
-        }
+        set_window_text(self.state.handle.get(), text);
     }
 
     pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
@@ -109,6 +96,29 @@ impl Form {
     pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
         clone_cell_opt_rc(&self.state.default_button_font)
     }
+
+    pub fn set_menu(&self, menu: Option<Menu>) {
+        unsafe {
+            if let Some(menu) = menu {
+                let hmenu = menu.extract();
+                if SetMenu(self.state.handle.get(), hmenu).into() {
+                    debug!("successfully set menu for form");
+                } else {
+                    warn!("failed to set menu for form: {}", GetLastError());
+                }
+            } else {
+                if SetMenu(self.state.handle.get(), 0).into() {
+                    trace!("cleared menu for form");
+                } else {
+                    warn!("failed to clear menu for form");
+                }
+            }
+        }
+    }
+
+    pub fn set_layout(&self, layout: Layout) {
+        self.state.set_layout(layout);
+    }
 }
 
 const FORM_WM_BACKGROUND_COMPLETION: u32 = WM_USER + 0;
@@ -118,23 +128,54 @@ impl FormState {
     pub(crate) fn invalidate_layout(&self) {
         self.is_layout_valid.set(false);
     }
-}
 
-type ATOM = u16;
-// use windows::Win32::UI::WindowsAndMessaging::ATOM;
+    fn ensure_layout_valid(&self) {
+        if self.is_layout_valid.get() {
+            trace!("layout is already valid");
+            return;
+        }
+
+        unsafe {
+            let mut client_rect: RECT = zeroed();
+            if GetClientRect(self.handle.get(), &mut client_rect).into() {
+                debug!(
+                    "running layout, rect: {},{} - {},{}",
+                    client_rect.left, client_rect.top, client_rect.right, client_rect.bottom
+                );
+
+                let layout_opt = self.layout.borrow();
+                if let Some(layout) = &*layout_opt {
+                    let min_size = layout.get_min_size();
+                    self.layout_min_size.set(min_size);
+
+                    layout.place(
+                        client_rect.left,
+                        client_rect.top,
+                        client_rect.right - client_rect.left,
+                        client_rect.bottom - client_rect.top,
+                    );
+                }
+                self.is_layout_valid.set(true);
+            } else {
+                warn!("failed to get client rect");
+            }
+        }
+    }
+
+    pub fn set_layout(&self, layout: Layout) {
+        let mut layout_borrow = self.layout.borrow_mut();
+        *layout_borrow = Some(layout);
+        drop(layout_borrow);
+
+        self.invalidate_layout();
+        self.ensure_layout_valid();
+    }
+}
 
 static REGISTER_CLASS_ONCE: Once = Once::new();
 static mut FORM_CLASS_ATOM: ATOM = 0;
 
 const FORM_CLASS_NAME: &str = "RustForms_Form";
-
-pub(crate) fn get_instance() -> HINSTANCE {
-    unsafe {
-        let instance = windows::Win32::System::LibraryLoader::GetModuleHandleA(None);
-        debug_assert!(instance != 0);
-        instance
-    }
-}
 
 fn register_class_lazy() -> ATOM {
     REGISTER_CLASS_ONCE.call_once(|| unsafe {
@@ -224,6 +265,10 @@ extern "system" fn form_wndproc(
                 let new_width = (lparam & 0xffff) as u32;
                 let new_height = ((lparam >> 16) & 0xffff) as u32;
                 trace!("WM_SIZE: {} x {}", new_width, new_height);
+
+                state.invalidate_layout();
+                state.ensure_layout_valid();
+
                 return 0;
             }
 
@@ -246,7 +291,7 @@ extern "system" fn form_wndproc(
                     // It's a child window handle.
                     let child_hwnd: HWND = lparam as HWND;
 
-                    let mut event_handlers = state.event_handlers.borrow();
+                    let event_handlers = state.event_handlers.borrow();
                     if let Some(handler) = event_handlers.get(&child_hwnd) {
                         debug!(
                             "WM_COMMAND: 0x{:x} hwnd 0x{:x} - found handler",
@@ -276,23 +321,69 @@ extern "system" fn form_wndproc(
             // WM_NOTIFY is used by most of the Common Controls to communicate
             // with the app.
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-notify
-            #[cfg(nope)]
             WM_NOTIFY => {
-                debug!("WM_NOTIFY");
                 let nmhdr_ptr: *mut NMHDR = lparam as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
-                let code: u32 = (*nmhdr_ptr).code;
-
                 // Look up the control by window handle.
-
-                if let Some(control) = state.controls.get(&hwnd_from) {
+                let notify_handlers = state.notify_handlers.borrow();
+                if let Some(control) = notify_handlers.get(&hwnd_from) {
                     // Clone the Rc.
-                    let cloned_control = control.clone();
+                    let cloned_control = control.handler.clone();
+                    drop(notify_handlers); // drop dynamic borrow
+                    return cloned_control.wm_notify(wparam, nmhdr_ptr);
                 } else {
-                    debug!("WM_NOTIFY: received notification for unknown control window");
+                    // debug!("WM_NOTIFY: received notification for unknown control window");
+                    return 0;
+                }
+            }
+
+            WM_SIZING => {
+                let (min_width, min_height) = state.layout_min_size.get();
+                let window_size: &mut RECT = &mut *(lparam as *mut RECT);
+                let height = window_size.bottom - window_size.top;
+
+                // TODO: These adjustments are made to the non-client area,
+                // not to the client area.
+                let mut adjusted_rect = RECT {
+                    top: 0,
+                    left: 0,
+                    right: min_width,
+                    bottom: min_height,
+                };
+
+                let window_style = GetWindowLongW(window, GWL_STYLE) as u32;
+
+                AdjustWindowRect(&mut adjusted_rect, window_style, false);
+                let min_width = adjusted_rect.right - adjusted_rect.left;
+                let min_height = adjusted_rect.bottom - adjusted_rect.top;
+
+                // If the width is too small, resist!
+                let width = window_size.right - window_size.left;
+                if width < min_width {
+                    match wparam as u32 {
+                        WMSZ_RIGHT | WMSZ_TOPRIGHT | WMSZ_BOTTOMRIGHT => {
+                            window_size.right = window_size.left + min_width;
+                        }
+                        WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT => {
+                            window_size.left = window_size.right - min_width;
+                        }
+                        _ => {}
+                    }
                 }
 
-                return 0;
+                // If the height is too small, resist!
+                if height < min_height {
+                    window_size.bottom = window_size.top + min_height;
+                    match wparam as u32 {
+                        WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT => {
+                            window_size.top = window_size.bottom - min_height;
+                        }
+                        WMSZ_BOTTOM | WMSZ_BOTTOMLEFT | WMSZ_BOTTOMRIGHT => {
+                            window_size.bottom = window_size.top + min_height;
+                        }
+                        _ => {}
+                    }
+                }
             }
 
             _ => {

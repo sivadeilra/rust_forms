@@ -1,38 +1,27 @@
 use super::*;
-use core::any::Any;
-use widestring::U16CString;
-
-#[derive(Clone)]
-pub struct ListView {
-    control: Control,
-    state: Rc<ListViewState>,
-}
 
 impl core::ops::Deref for ListView {
-    type Target = Control;
-    fn deref(&self) -> &Control {
+    type Target = ControlState;
+    fn deref(&self) -> &ControlState {
         &self.control
     }
 }
 
-struct ListViewState {
-    handlers: RefCell<Vec<ListViewHandler>>,
+pub struct ListView {
+    control: ControlState,
+    handlers: RefCell<Vec<Rc<ListViewHandler>>>,
 }
 
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    fn handle(&self) -> HWND {
-        self.control.handle()
-    }
-
     pub fn set_visible(&self, value: bool) {
-        let style = self.control.state.get_window_style();
+        let style = self.control.get_window_style();
         let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { 0 });
-        self.control.state.set_window_style(new_style);
+        self.control.set_window_style(new_style);
     }
 
-    pub fn new(form: &Form, rect: &Rect) -> Self {
+    pub fn new(form: &Form, rect: &Rect) -> Rc<ListView> {
         unsafe {
             let parent_window = form.handle();
 
@@ -41,7 +30,7 @@ impl ListView {
 
             let ex_style = 0;
 
-            let windowHandle = CreateWindowExW(
+            let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
@@ -56,29 +45,59 @@ impl ListView {
                 null_mut(),     // &*state as *const ListViewState as *const c_void as *mut c_void,
             );
 
-            if windowHandle == 0 {
+            if hwnd == 0 {
                 panic!("failed to create ListView window");
             }
 
-            debug!("created list view window 0x{:x}", windowHandle);
+            debug!("created list view window 0x{:x}", hwnd);
 
-            let control = Control {
-                state: Rc::new(ControlState {
-                    controls: Vec::new(),
-                    // parent: Rc::downgrade(&form.state),
-                    handle: windowHandle,
+            let state: Rc<ListView> = Rc::new(ListView {
+                control: ControlState {
+                    handle: hwnd,
                     layout: RefCell::new(ControlLayout::default()),
                     form: Rc::downgrade(&form.state),
-                }),
-            };
-
-            let state: Rc<ListViewState> = Rc::new(ListViewState {
+                },
                 handlers: RefCell::new(Vec::new()),
             });
             form.state.invalidate_layout();
+
+            let mut notify_handlers = form.state.notify_handlers.borrow_mut();
+            let state_rc: Rc<ListView> = Rc::clone(&state);
+            notify_handlers.insert(state.handle(), NotifyHandler { handler: state_rc });
+
             // let mut controls = form.state.controls.borrow_mut();
-            // controls.insert(this.handle(), Rc::clone(&this));
-            Self { control, state }
+            // controls.insert(state.control.handle(), Rc::clone(&state));
+            state
+        }
+    }
+
+    /// Iterates the indices of the selected items.
+    pub fn iter_selected_items(&self) -> IterSelectedItems<'_> {
+        IterSelectedItems {
+            next: -1,
+            list_view: self,
+        }
+    }
+
+    // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-setitemstate
+    pub fn set_item_selected(&self, item: usize, value: bool) {
+        unsafe {
+            let mut lv_item: LVITEMW = zeroed();
+            lv_item.stateMask = LVIS_SELECTED;
+            lv_item.state = (value as u32) * LVIS_SELECTED;
+            SendMessageW(
+                self.handle(),
+                LVM_SETITEMSTATE,
+                item as WPARAM,
+                &lv_item as *const LVITEMW as LPARAM,
+            );
+        }
+    }
+
+    pub fn set_all_selected(&self, value: bool) {
+        let len = self.items_len();
+        for i in 0..len {
+            self.set_item_selected(i, value);
         }
     }
 
@@ -98,14 +117,21 @@ impl ListView {
             );
         }
     }
-    pub fn remove_column(&self, index: u32) {}
 
-    pub fn set_column_text(&self, column: usize, heading: &str) {}
+    // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-deletecolumn
+    pub fn delete_column(&self, index: usize) {
+        unsafe {
+            SendMessageW(self.control.handle(), LVM_DELETECOLUMN, index, 0);
+        }
+    }
+
+    // pub fn set_column_text(&self, column: usize, heading: &str) {}
 
     // Appearance properties
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/extended-list-view-styles
 
+    #[allow(dead_code)]
     fn get_ex_style(&self) -> u32 {
         unsafe { SendMessageW(self.control.handle(), LVM_GETEXTENDEDLISTVIEWSTYLE, 0, 0) as u32 }
     }
@@ -147,23 +173,25 @@ impl ListView {
     }
 
     pub fn set_multi_select(&self, value: bool) {
-        self.control.state.set_window_style_flag(LVS_SINGLESEL, !value);
+        self.control.set_window_style_flag(LVS_SINGLESEL, !value);
     }
 
     pub fn set_show_sort_header(&self, value: bool) {
-        self.control.state.set_window_style_flag(LVS_NOSORTHEADER, !value);
+        self.control.set_window_style_flag(LVS_NOSORTHEADER, !value);
     }
 
     pub fn set_edit_labels(&self, value: bool) {
-        self.control.state.set_window_style_flag(LVS_EDITLABELS, value);
+        self.control.set_window_style_flag(LVS_EDITLABELS, value);
     }
 
     /// Sets all items to the not-selected state.
     pub fn clear_selection(&self) {}
 
     /// Gets the number of items in the list view.
+    ///
+    /// See <https://docs.microsoft.com/en-us/windows/win32/controls/lvm-getitemcount>
     pub fn items_len(&self) -> usize {
-        todo!()
+        unsafe { SendMessageW(self.handle(), LVM_GETITEMCOUNT, 0, 0) as usize }
     }
 
     pub fn delete_item(&self, item: usize) {
@@ -221,12 +249,8 @@ impl ListView {
         }
     }
 
-    pub fn get_item_data(&self, pos: usize) -> Option<&Box<dyn Any>> {
-        todo!();
-    }
-
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-insertitem
-    pub fn insert_item(&self, text: &str) {
+    pub fn insert_item(&self, text: &str) -> usize {
         unsafe {
             let textw = WCString::from_str_truncate(text);
             let mut lv_item: LVITEMW = zeroed();
@@ -239,7 +263,7 @@ impl ListView {
                 LVM_INSERTITEMW,
                 0,
                 &lv_item as *const _ as LPARAM,
-            );
+            ) as usize
         }
     }
 
@@ -272,7 +296,7 @@ impl ListView {
         unsafe {
             let mut lv_item: LVITEMW = zeroed();
             lv_item.stateMask = state_mask;
-            lv_item.state = state_mask;
+            lv_item.state = state;
             lv_item.iSubItem = subitem as i32;
 
             SendMessageW(
@@ -287,30 +311,110 @@ impl ListView {
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-setview
     pub fn set_view(&self, mode: Mode) {
         unsafe {
-            let result = SendMessageW(self.handle(), LVM_SETVIEW, mode.to_native() as WPARAM, 0);
-            // debug!("LV_SETVIEW result: {}", result);
+            SendMessageW(self.handle(), LVM_SETVIEW, mode.to_native() as WPARAM, 0);
         }
     }
 
+    fn add_handler(&self, handler: ListViewHandler) {
+        let mut handlers = self.handlers.borrow_mut();
+        handlers.push(Rc::new(handler));
+    }
+
     // Events
-    pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {}
-    pub fn on_item_activated(&self, handler: EventHandler<ItemActivated>) {}
+    pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {
+        self.add_handler(ListViewHandler::SelectionChanged(handler));
+    }
+
+    pub fn on_item_activated(&self, handler: EventHandler<ItemActivated>) {
+        self.add_handler(ListViewHandler::ItemActivated(handler));
+    }
+
+    pub fn on_click(&self, handler: EventHandler<ItemActivate>) {
+        self.add_handler(ListViewHandler::Click(handler));
+    }
+
+    pub fn on_rclick(&self, handler: EventHandler<ItemActivate>) {
+        self.add_handler(ListViewHandler::RClick(handler));
+    }
+
+    fn for_all_handlers(&self, f: impl Fn(&ListViewHandler)) {
+        let mut i = 0;
+        loop {
+            let handlers = self.handlers.borrow();
+            if i >= handlers.len() {
+                break;
+            }
+            let h = Rc::clone(&handlers[i]);
+            i += 1;
+            drop(handlers);
+            f(&h);
+        }
+    }
+}
+
+impl NotifyHandlerTrait for ListView {
+    unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> LRESULT {
+        match (*nmhdr).code as i32 {
+            // https://docs.microsoft.com/en-us/windows/win32/controls/nm-click-list-view
+            NM_CLICK => {
+                let item_ptr = nmhdr as *const NMITEMACTIVATE;
+                let item = &*item_ptr;
+                self.for_all_handlers(|h| {
+                    if let ListViewHandler::Click(h) = h {
+                        (h.handler)(item.into());
+                    }
+                });
+                0
+            }
+            NM_DBLCLK => {
+                trace!("list view NM_DBLCLK");
+                0
+            }
+            NM_RCLICK => {
+                let item_ptr = nmhdr as *const NMITEMACTIVATE;
+                let item = &*item_ptr;
+                self.for_all_handlers(|h| {
+                    if let ListViewHandler::RClick(h) = h {
+                        (h.handler)(item.into());
+                    }
+                });
+                0
+            }
+
+            _ => {
+                // trace!("unrecognized WM_NOTIFY");
+                0
+            }
+        }
+    }
 }
 
 pub struct SetItem<'a> {
     pub text: Option<&'a str>,
 }
 
-pub struct ItemRef<'a> {
-    list_view: &'a ListView,
-    index: usize,
-}
-
-impl<'a> ItemRef<'a> {}
-
 enum ListViewHandler {
     SelectionChanged(EventHandler<SelectionChanged>),
     ItemActivated(EventHandler<ItemActivated>),
+    Click(EventHandler<ItemActivate>),
+    RClick(EventHandler<ItemActivate>),
+}
+
+#[derive(Clone)]
+pub struct ItemActivate {
+    pub item: isize,
+    pub subitem: isize,
+    pub point: POINT,
+}
+
+impl From<&NMITEMACTIVATE> for ItemActivate {
+    fn from(value: &NMITEMACTIVATE) -> Self {
+        Self {
+            item: value.iItem as isize,
+            subitem: value.iSubItem as isize,
+            point: value.ptAction,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -344,4 +448,28 @@ pub struct SelectionChanged {
 /// The user has double-clicked on an item.
 pub struct ItemActivated {
     pub item: usize,
+}
+
+pub struct IterSelectedItems<'a> {
+    next: isize,
+    list_view: &'a ListView,
+}
+
+impl<'a> Iterator for IterSelectedItems<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        unsafe {
+            let result = SendMessageW(
+                self.list_view.control.handle(),
+                LVM_GETNEXTITEM,
+                self.next as WPARAM,
+                LVNI_SELECTED as LPARAM,
+            );
+            if result < 0 {
+                return None;
+            }
+            self.next = result;
+            Some(result as usize)
+        }
+    }
 }

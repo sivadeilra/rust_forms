@@ -73,14 +73,14 @@ impl<'a> FormBuilder<'a> {
             let form_alloc: Rc<FormState> = Rc::new(FormState {
                 handle: Cell::new(0),
                 quit_on_close: self.quit_on_close,
-                controls: RefCell::new(HashMap::new()),
-                is_visible: Cell::new(false),
                 is_layout_valid: Cell::new(false),
                 notify_handlers: RefCell::new(HashMap::new()),
                 event_handlers: RefCell::new(HashMap::new()),
                 default_edit_font: Default::default(),
                 default_button_font: Default::default(),
                 receivers: Default::default(),
+                layout: RefCell::new(None),
+                layout_min_size: Cell::new((0, 0)),
             });
 
             let form_alloc_ptr: *const FormState = &*form_alloc;

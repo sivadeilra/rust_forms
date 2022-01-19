@@ -6,7 +6,7 @@ pub struct FixedLayout {
 
 /// An item in a Fixed layout.
 pub struct FixedItem {
-    pub item: Item,
+    pub item: LayoutItem,
     pub pos: Point,
     pub size: Size,
 }

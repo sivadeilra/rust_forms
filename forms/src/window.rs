@@ -23,4 +23,3 @@ impl Drop for WindowHandle {
         }
     }
 }
-

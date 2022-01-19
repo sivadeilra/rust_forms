@@ -2,7 +2,7 @@
 pub fn new_gui() -> Gui {
     Gui {}
 }
-x
+
 pub struct Gui {}
 
 impl Gui {
@@ -15,11 +15,8 @@ impl Gui {
 
 pub struct Window {}
 
-pub struct ListView {
-}
+pub struct ListView {}
 
 impl ListView {
-    pub fn add_item(&self) {
-    }
+    pub fn add_item(&self) {}
 }
-

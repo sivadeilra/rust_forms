@@ -28,7 +28,15 @@ fn main() {
     f.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
     f.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
 
-    let lv = ListView::new(&f);
+    let lv = ListView::new(
+        &f,
+        &Rect {
+            top: 10,
+            left: 5,
+            right: 500,
+            bottom: 600,
+        },
+    );
 
     lv.set_view(Mode::Details);
     lv.set_full_row_select(true);

@@ -1,33 +1,29 @@
 use super::*;
 
 pub struct Button {
-    control: Control,
-    state: Rc<ButtonState>,
-}
-
-impl core::ops::Deref for Button {
-    type Target = Control;
-    fn deref(&self) -> &Control {
-        &self.control
-    }
-}
-
-pub(crate) struct ButtonState {
+    control: ControlState,
     font: Cell<Option<Rc<Font>>>,
     on_click: Cell<Option<Rc<EventHandler<()>>>>,
 }
 
+impl core::ops::Deref for Button {
+    type Target = ControlState;
+    fn deref(&self) -> &ControlState {
+        &self.control
+    }
+}
+
 impl Button {
-    pub fn new(form: &Form, rect: &Rect) -> Self {
+    pub fn new(form: &Form, rect: Option<&Rect>) -> Rc<Button> {
         unsafe {
             let parent_window = form.handle();
-
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("BUTTON");
-
             let ex_style = 0;
 
-            let windowHandle = CreateWindowExW(
+            let rect = rect_or_default(rect);
+
+            let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
@@ -42,36 +38,27 @@ impl Button {
                 null_mut(),
             );
 
-            if windowHandle == 0 {
+            if hwnd == 0 {
                 panic!("failed to create button window");
             }
 
-            debug!("created list view window 0x{:x}", windowHandle);
-
-            let control = Control {
-                state: Rc::new(ControlState {
-                    controls: Vec::new(),
-                    handle: windowHandle,
+            let this = Rc::new(Button {
+                control: ControlState {
+                    handle: hwnd,
                     layout: RefCell::new(ControlLayout::default()),
                     form: Rc::downgrade(&form.state),
-                }),
-            };
-
-            form.state.invalidate_layout();
-
-            let mut state = Rc::new(ButtonState {
+                },
                 on_click: Cell::new(None),
                 font: Default::default(),
             });
 
             {
                 let mut event_handlers = form.state.event_handlers.borrow_mut();
-                let handler_rc: Rc<ButtonState> = Rc::clone(&state);
-                event_handlers.insert(windowHandle, handler_rc);
+                let handler_rc: Rc<Button> = Rc::clone(&this);
+                event_handlers.insert(hwnd, handler_rc);
             }
 
-            let mut controls = form.state.controls.borrow_mut();
-            let this = Self { control, state };
+            // let controls = form.state.controls.borrow_mut();
 
             if let Some(font) = form.get_default_button_font() {
                 this.set_font(font);
@@ -82,10 +69,9 @@ impl Button {
     }
 
     pub fn set_font(&self, font: Rc<Font>) {
-        trace!("edit: setting font");
         unsafe {
             SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
-            self.state.font.set(Some(font));
+            self.font.set(Some(font));
         }
     }
 
@@ -94,16 +80,16 @@ impl Button {
     }
 
     pub fn on_clicked(&self, handler: EventHandler<()>) {
-        self.state.on_click.set(Some(Rc::new(handler)));
+        self.on_click.set(Some(Rc::new(handler)));
     }
 }
 
-impl MessageHandlerTrait for ButtonState {
-    fn handle_message(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+impl MessageHandlerTrait for Button {
+    fn handle_message(&self, _msg: u32, _wparam: WPARAM, _lparam: LPARAM) -> LRESULT {
         0
     }
 
-    fn wm_command(&self, control_id: u16, notify_code: u16) -> LRESULT {
+    fn wm_command(&self, _control_id: u16, notify_code: u16) -> LRESULT {
         match notify_code as u32 {
             BN_CLICKED => {
                 if let Some(on_click) = self.on_click.take() {

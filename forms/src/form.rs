@@ -176,7 +176,6 @@ extern "system" fn form_wndproc(
     lparam: LPARAM,
 ) -> LRESULT {
     unsafe {
-
         match message {
             winuser::WM_CREATE => {
                 let create_struct: *mut winuser::CREATESTRUCTW =
@@ -215,7 +214,6 @@ extern "system" fn form_wndproc(
                 0
             }
             */
-
             winuser::WM_CLOSE => {
                 if let Some(exit_code) = state.quit_on_close {
                     debug!("WM_CLOSE: posting quit message");

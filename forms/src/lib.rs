@@ -20,6 +20,7 @@ use core::cell::UnsafeCell;
 use core::ffi::c_void;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
+use std::rc::Rc;
 use widestring::{U16CStr, U16CString};
 use windows::Win32::UI::Controls::*;
 use windows::Win32::UI::WindowsAndMessaging as winuser;
@@ -45,3 +46,9 @@ pub fn init_common_controls() {
 const STAP_ALLOW_NONCLIENT: u32 = 1 << 0;
 const STAP_ALLOW_CONTROLS: u32 = 1 << 1;
 const STAP_ALLOW_WEBCONTENT: u32 = 1 << 2;
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct Point(pub i32, pub i32);
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct Size(pub i32, pub i32);

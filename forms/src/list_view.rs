@@ -17,33 +17,32 @@ impl core::ops::Deref for ListView {
 }
 
 impl ListView {
-
     /*
-    pub fn new(parent: &Form) {
-        unsafe {
-            let ex_style: u32 = 0;
+        pub fn new(parent: &Form) {
+            unsafe {
+                let ex_style: u32 = 0;
 
-            let handle = winuser::CreateWindowExW(
-                ex_style,
-                PWSTR(window_class_atom as usize as *mut u16),
-                window_name_pwstr,
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                width,
-                height,
-                None,
-                None,
-                instance,
-                form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
-            );
+                let handle = winuser::CreateWindowExW(
+                    ex_style,
+                    PWSTR(window_class_atom as usize as *mut u16),
+                    window_name_pwstr,
+                    WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                    CW_USEDEFAULT,
+                    CW_USEDEFAULT,
+                    width,
+                    height,
+                    None,
+                    None,
+                    instance,
+                    form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
+                );
 
-            if handle == 0 {
-                panic!("Failed to create window");
+                if handle == 0 {
+                    panic!("Failed to create window");
+                }
             }
         }
-    }
-*/
+    */
 
     pub fn insert_column(&self, index: usize, column: Column<'_>) {
         unsafe {

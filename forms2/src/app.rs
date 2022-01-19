@@ -1,25 +1,5 @@
 use super::*;
 
-pub struct App {
-    state: Rc<AppState>,
-}
-
-assert_not_impl_any!(App: Send, Sync);
-
-pub(crate) struct AppState {
-    controls: HashMap<HWND, Control>,
-}
-
-impl App {
-    pub fn new() -> Self {
-        Self {
-            state: Rc::new(AppState {
-                controls: HashMap::new(),
-            }),
-        }
-    }
-}
-
 pub fn post_quit_message(exit_code: i32) {
     unsafe { PostQuitMessage(exit_code) }
 }

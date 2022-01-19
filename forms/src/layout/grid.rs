@@ -7,7 +7,7 @@ pub struct GridLayout {
 }
 
 pub struct GridItem {
-    pub item: Item,
+    pub item: LayoutItem,
     pub col: u16,
     pub row: u16,
     pub col_span: u16,
@@ -28,8 +28,6 @@ pub enum GridDim {
 }
 
 impl GridLayout {
-    pub(crate) fn set_size_pos(&mut self, size: Size, pos: Point) {}
-
     #[cfg(todo)]
     pub fn add_control(
         &mut self,

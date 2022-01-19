@@ -23,7 +23,5 @@ pub fn event_loop() {
 }
 
 pub fn post_quit_message(exit_code: i32) {
-    unsafe {
-        winuser::PostQuitMessage(exit_code)
-    }
+    unsafe { winuser::PostQuitMessage(exit_code) }
 }

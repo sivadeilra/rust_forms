@@ -1,45 +1,56 @@
-#![allow(warnings)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
 
 mod app;
 mod button;
 mod control;
+mod error;
+mod executor;
+mod ffi;
 mod font;
 mod form;
-mod layout;
-mod list_view;
+mod label;
+pub mod layout;
+pub mod list_view;
+mod menu;
 mod text_box;
-mod error;
 
-pub use error::{Error, Result};
 pub use app::*;
 pub use button::*;
 pub use control::*;
+pub use error::{Error, Result};
+pub use executor::*;
 pub use font::*;
 pub use form::*;
+pub use label::Label;
 pub use layout::*;
-pub use list_view::*;
+pub use list_view::{ListView, Mode};
+pub use menu::*;
 pub use text_box::*;
 pub use windows::Win32::Foundation::RECTL as Rect;
 
-use core::any::Any;
 use core::cell::UnsafeCell;
 use core::ffi::c_void;
 use core::mem::{size_of, zeroed};
-use core::ptr::null_mut;
-use log::{debug, error, trace};
+use core::ptr::{null, null_mut};
+use ffi::*;
+use log::{debug, error, trace, warn};
 use static_assertions::assert_not_impl_any;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use widestring::U16CStr as WCStr;
 use widestring::U16CString as WCString;
+use widestring::U16CString;
 use widestring::U16Str as WStr;
-use widestring::{U16CStr, U16CString};
-use windows::Win32::Foundation::{BOOL, HWND, PWSTR, *};
+use windows::Win32::Foundation::{HWND, PWSTR, *};
+use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::Controls::*;
-use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
+
+// TODO: We currently leak these types. Fix that.
+pub use windows::Win32::Foundation::POINT;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Size(i32, i32);
@@ -117,4 +128,31 @@ fn clone_cell_opt_rc<T>(rc: &Cell<Option<Rc<T>>>) -> Option<Rc<T>> {
     let result = value.clone();
     rc.set(value);
     result
+}
+
+pub fn get_cursor_pos() -> POINT {
+    unsafe {
+        let mut pt: POINT = zeroed();
+        GetCursorPos(&mut pt);
+        pt
+    }
+}
+
+type ATOM = u16;
+// use windows::Win32::UI::WindowsAndMessaging::ATOM;
+
+pub(crate) fn get_instance() -> HINSTANCE {
+    unsafe {
+        let instance = windows::Win32::System::LibraryLoader::GetModuleHandleA(None);
+        debug_assert!(instance != 0);
+        instance
+    }
+}
+
+fn rect_or_default(r: Option<&Rect>) -> Rect {
+    if let Some(r) = r {
+        *r
+    } else {
+        Default::default()
+    }
 }

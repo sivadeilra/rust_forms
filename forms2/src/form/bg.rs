@@ -6,6 +6,7 @@ struct BackgroundContextHeader {
     completion_func: unsafe fn(header: *mut BackgroundContextHeader),
 }
 
+#[repr(C)] // want linear layout
 struct BackgroundContext<Worker, WorkOutput, Finisher> {
     header: BackgroundContextHeader,
     hwnd: HWND,
@@ -32,7 +33,7 @@ impl Form {
             let mut context = parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>;
 
             (*context).output = MaybeUninit::new(catch_unwind(AssertUnwindSafe(move || {
-                let mut worker: Worker = (*context).worker.as_mut_ptr().read();
+                let worker: Worker = (*context).worker.as_mut_ptr().read();
                 worker()
             })));
 
@@ -49,8 +50,7 @@ impl Form {
 
         unsafe fn completion_func<Worker, WorkOutput, Finisher>(
             parameter: *mut BackgroundContextHeader,
-        )
-        where
+        ) where
             Worker: FnOnce() -> WorkOutput + 'static + Sync + Sync,
             Finisher: FnOnce(std::thread::Result<WorkOutput>) + 'static,
         {
@@ -58,7 +58,7 @@ impl Form {
             // - 'worker' field is dead
             // - 'output' field is live
             // - 'finisher' field is live
-            let mut context = parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>;
+            let context = parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>;
 
             let finisher = (*context).finisher.as_mut_ptr().read();
             let output = (*context).output.as_mut_ptr().read();
@@ -73,7 +73,7 @@ impl Form {
         }
 
         unsafe {
-            let mut context: Box<BackgroundContext<Worker, WorkOutput, Finisher>> =
+            let context: Box<BackgroundContext<Worker, WorkOutput, Finisher>> =
                 Box::new(BackgroundContext {
                     header: BackgroundContextHeader {
                         completion_func: completion_func::<Worker, WorkOutput, Finisher>,
@@ -83,7 +83,7 @@ impl Form {
                     finisher: MaybeUninit::new(finisher),
                     output: MaybeUninit::zeroed(),
                 });
-            let mut context_ptr = Box::into_raw(context);
+            let context_ptr = Box::into_raw(context);
 
             if QueueUserWorkItem(
                 Some(thread_routine::<Worker, WorkOutput, Finisher>),
