@@ -68,6 +68,12 @@ impl Button {
         }
     }
 
+    pub fn set_enabled(&self, value: bool) {
+        unsafe {
+            EnableWindow(self.control.handle, value);
+        }
+    }
+
     pub fn set_font(&self, font: Rc<Font>) {
         unsafe {
             SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);

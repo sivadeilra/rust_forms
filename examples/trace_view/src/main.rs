@@ -10,11 +10,16 @@ mod worker;
 use worker::*;
 
 struct AppState {
+    #[allow(dead_code)]
     path: RefCell<Option<String>>,
     form: Form,
     results: Rc<ListView>,
     results_context_menu: Rc<Menu>,
+    #[allow(dead_code)]
     exec: AsyncExecutor,
+
+    commands_sender: mpsc::Sender<WorkerCommand>,
+    query_button: Rc<Button>,
 }
 
 const IDM_PROPERTIES: u32 = 1;
@@ -52,6 +57,8 @@ fn main() {
     });
     f.set_menu(Some(main_menu));
 
+    let (commands_sender, commands_receiver) = mpsc::channel::<WorkerCommand>();
+
     let app: Rc<AppState> = Rc::new(AppState {
         path: Default::default(),
         form: f.clone(),
@@ -86,15 +93,20 @@ fn main() {
             });
             Rc::new(m)
         },
+
+        commands_sender,
+        query_button: Button::new(&f, None),
     });
 
     let edit = TextBox::new(&f, None);
     edit.set_text("cl.exe");
     edit.set_tab_stop(true);
 
-    let query_button = Button::new(&f, None);
-    query_button.set_text("Find Processes");
-    query_button.set_tab_stop(true);
+    app.query_button.set_text("Find Processes");
+    app.query_button.set_tab_stop(true);
+
+    let close_button = Button::new(&f, None);
+    close_button.set_text("Close File");
 
     let b1 = Button::new(&f, None);
     b1.set_text("b1");
@@ -163,7 +175,8 @@ fn main() {
                     orientation: Orientation::Vertical,
                     items: vec![
                         LayoutItem::Control(edit.clone()),
-                        LayoutItem::Control(query_button.clone()),
+                        LayoutItem::Control(app.query_button.clone()),
+                        LayoutItem::Control(close_button.clone()),
                         LayoutItem::Control(b1.clone()),
                         LayoutItem::Control(b2.clone()),
                         LayoutItem::Control(b3.clone()),
@@ -221,23 +234,20 @@ fn main() {
             );
         }));
 
-    let (commands_sender, commands_receiver) = mpsc::channel::<WorkerCommand>();
-
     // Start things off by opening a new trace file.
     let trace_file_path = r"d:\ES.Build.RustTools\direct2d_buildfre.trc";
-    commands_sender
+    app.commands_sender
         .send(WorkerCommand::OpenTraceFile(trace_file_path.to_string()))
         .unwrap();
 
-    query_button.on_clicked(EventHandler::new({
+    app.query_button.on_clicked(EventHandler::new({
         let app = app.clone();
-        let commands = commands_sender.clone();
         move |()| {
             let query_text = edit.get_text();
             match Regex::new(&query_text) {
                 Ok(regex) => {
                     app.results.delete_all_items();
-                    commands
+                    app.commands_sender
                         .send(WorkerCommand::Query {
                             regex,
                             max_results: 50,
@@ -250,6 +260,7 @@ fn main() {
             }
         }
     }));
+    app.query_button.set_enabled(false);
 
     let response_sender = f.register_receiver_func::<WorkerResponse, _>("worker", {
         let app = app.clone();
@@ -266,6 +277,14 @@ fn main() {
         .on_selection_changed(EventHandler::new(move |_| {
             info!("selection changed.");
         }));
+
+    close_button.on_clicked(EventHandler::new({
+        let app = app.clone();
+        move |_| {
+            app.query_button.set_enabled(false);
+            let _ = app.commands_sender.send(WorkerCommand::CloseTraceFile);
+        }
+    }));
 
     f.show_window();
 
@@ -286,6 +305,15 @@ impl AppState {
             WorkerResponse::QueryResult { dir, name } => {
                 let item = self.results.insert_item(&dir);
                 self.results.set_subitem_text(item, 1, &name);
+            }
+
+            WorkerResponse::OpenFailed(e) => {
+                error!("failed to open trace file: {:?}", e);
+                self.query_button.set_enabled(false);
+            }
+
+            WorkerResponse::OpenSucceeded => {
+                self.query_button.set_enabled(true);
             }
 
             _ => {

@@ -51,23 +51,23 @@ fn main() {
 
     let edit = TextBox::new(
         &f,
-        &Rect {
+        Some(&Rect {
             top: 10,
             left: 500,
             right: 500 + 200,
             bottom: 10 + 30,
-        },
+        }),
     );
     edit.set_text("some path");
 
     let start = Button::new(
         &f,
-        &Rect {
+        Some(&Rect {
             top: 50,
             left: 500,
             right: 500 + 200,
             bottom: 50 + 30,
-        },
+        }),
     );
     start.set_text("Start Your Engine");
 
@@ -92,7 +92,7 @@ fn main() {
     event_loop();
 }
 
-fn load_directory(f: &Form, lv: &ListView, path: &str) {
+fn load_directory(f: &Form, lv: &Rc<ListView>, path: &str) {
     let path = path.to_string();
     f.run_background(
         move || {

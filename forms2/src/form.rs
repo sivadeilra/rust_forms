@@ -337,6 +337,7 @@ extern "system" fn form_wndproc(
                 }
             }
 
+            // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
             WM_SIZING => {
                 let (min_width, min_height) = state.layout_min_size.get();
                 let window_size: &mut RECT = &mut *(lparam as *mut RECT);

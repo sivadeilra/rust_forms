@@ -149,16 +149,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "forms"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "log",
- "widestring",
- "windows",
-]
-
-[[package]]
 name = "forms2"
 version = "0.1.0"
 dependencies = [

@@ -47,6 +47,7 @@ use windows::Win32::Foundation::{HWND, PWSTR, *};
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::Controls::*;
+use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 // TODO: We currently leak these types. Fix that.
