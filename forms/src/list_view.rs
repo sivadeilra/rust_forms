@@ -21,15 +21,13 @@ impl ListView {
         self.control.set_window_style(new_style);
     }
 
-    pub fn new(form: &Form, rect: &Rect) -> Rc<ListView> {
+    pub fn new(form: &Form, rect: Option<&Rect>) -> Rc<ListView> {
         unsafe {
             let parent_window = form.handle();
-
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
-
             let ex_style = 0;
-
+            let rect = rect_or_default(rect);
             let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
@@ -40,9 +38,9 @@ impl ListView {
                 rect.right - rect.left,
                 rect.bottom - rect.top,
                 parent_window,
-                0 as HMENU,     // hmenu,
-                get_instance(), // hinstance,
-                null_mut(),     // &*state as *const ListViewState as *const c_void as *mut c_void,
+                0 as HMENU,
+                get_instance(),
+                null_mut(),
             );
 
             if hwnd == 0 {
@@ -64,9 +62,6 @@ impl ListView {
             let mut notify_handlers = form.state.notify_handlers.borrow_mut();
             let state_rc: Rc<ListView> = Rc::clone(&state);
             notify_handlers.insert(state.handle(), NotifyHandler { handler: state_rc });
-
-            // let mut controls = form.state.controls.borrow_mut();
-            // controls.insert(state.control.handle(), Rc::clone(&state));
             state
         }
     }

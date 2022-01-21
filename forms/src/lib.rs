@@ -157,3 +157,20 @@ fn rect_or_default(r: Option<&Rect>) -> Rect {
         Default::default()
     }
 }
+
+pub fn with<T, F: FnMut(&mut T)>(mut value: T, mut f: F) -> T {
+    f(&mut value);
+    value
+}
+
+pub trait With {
+    fn with<F: FnMut(&mut Self)>(mut self, mut f: F) -> Self
+    where
+        Self: Sized,
+    {
+        f(&mut self);
+        self
+    }
+}
+
+impl<T> With for T {}

@@ -1,6 +1,6 @@
 use forms::layout::grid::*;
 use forms::*;
-use log::{debug, error, info, trace};
+use log::{error, info, trace};
 use regex::Regex;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -62,17 +62,8 @@ fn main() {
     let app: Rc<AppState> = Rc::new(AppState {
         path: Default::default(),
         form: f.clone(),
-        results: ListView::new(
-            &f,
-            &Rect {
-                top: 5,
-                left: 5,
-                bottom: 5 + 700,
-                right: 5 + 800,
-            },
-        ),
+        results: ListView::new(&f, None),
         exec: exec.clone(),
-
         results_context_menu: {
             let mut m = Menu::create_popup_menu();
             m.append_menu(MenuItem {
@@ -287,12 +278,6 @@ fn main() {
     }));
 
     f.show_window();
-
-    exec.spawn("hello".into(), async {
-        debug!("hello, world!  this is running in async.");
-        // let response = reqwest::get("https://google.com").await;
-        // debug!("response: {:#?}", response);
-    });
 
     event_loop();
 }
