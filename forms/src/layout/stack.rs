@@ -19,14 +19,21 @@ pub enum Orientation {
 }
 
 impl StackLayout {
-    pub(crate) fn place(&self, x: i32, y: i32, width: i32, height: i32) {
+    pub(crate) fn place(
+        &self,
+        placer: &mut dyn LayoutPlacer,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) {
         match self.orientation {
             Orientation::Vertical => {
                 let mut item_y = y + self.lead_margin;
                 for item in self.items.iter() {
                     let item_y_start = item_y;
                     item_y += self.pitch;
-                    item.place(x, item_y_start, width, self.pitch);
+                    item.place(placer, x, item_y_start, width, self.pitch);
                     item_y += self.padding;
                 }
             }
@@ -35,7 +42,7 @@ impl StackLayout {
                 for item in self.items.iter() {
                     let item_x_start = item_x;
                     item_x += self.pitch;
-                    item.place(item_x_start, y, self.pitch, height);
+                    item.place(placer, item_x_start, y, self.pitch, height);
                     item_x += self.padding;
                 }
             }

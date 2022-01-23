@@ -34,3 +34,10 @@ pub const WM_CTLCOLORSTATIC: u32 = 0x0138;
 
 // vsstyle.h, not in winmd apparently
 pub const WP_DIALOG: i32 = 29;
+
+pub(crate) type HDWP = isize;
+
+pub const TVN_FIRST: i32 = -400;
+pub const TVN_SELCHANGEDW: i32 = TVN_FIRST - 51;
+pub const TVN_ITEMCHANGINGW: i32 = TVN_FIRST - 17;
+pub const TVN_SELCHANGINGW: i32 = TVN_FIRST - 50;

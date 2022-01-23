@@ -1,6 +1,7 @@
 use forms::layout::grid::*;
+use forms::Result;
 use forms::*;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use regex::Regex;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -19,6 +20,7 @@ struct AppState {
     process_detail_view: Rc<TextBox>,
     process_detail_sequence_number: Cell<u64>,
     results_context_menu: Rc<Menu>,
+    scope_tree: Rc<TreeView>,
 
     results_data: RefCell<HashMap<usize, ProcessItem>>,
 
@@ -32,6 +34,7 @@ struct AppState {
 
     num_results: Cell<u32>,
 
+    #[allow(dead_code)]
     monospace_font: Rc<Font>,
 
     messenger: Messenger,
@@ -44,7 +47,7 @@ struct ProcessItem {
 const IDM_PROPERTIES: u32 = 1;
 const IDM_SINGLE_SELECTION: u32 = 2;
 
-fn main() {
+fn main() -> Result<()> {
     env_logger::init();
 
     let exec = AsyncExecutor::new();
@@ -55,7 +58,7 @@ fn main() {
         .text("Trace Viewer")
         .build();
     f.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
-    // f.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
+    f.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
 
     let mut main_menu = Menu::create_menu();
     main_menu.append_menu(MenuItem {
@@ -78,7 +81,7 @@ fn main() {
 
     let (commands_sender, commands_receiver) = mpsc::channel::<WorkerCommand>();
 
-    let monospace_font = Font::builder("Courier New", 18).build().unwrap();
+    let monospace_font = Font::builder("Courier New", 16).build().unwrap();
 
     let app: Rc<AppState> = Rc::new(AppState {
         path: Default::default(),
@@ -89,8 +92,8 @@ fn main() {
             w.set_grid_lines(true);
             w.set_check_boxes(true);
             w.set_double_buffer(true);
-            w.add_column(0, 600, "Stuff");
-            w.add_column(1, 80, "More stuff");
+            w.add_column(0, 450, "Directory");
+            w.add_column(1, 350, "Tool");
         }),
         exec: exec.clone(),
         results_context_menu: {
@@ -133,10 +136,41 @@ fn main() {
             w.set_tab_stop(true);
         }),
         messenger: Messenger::new(),
-        status: f.create_status_bar(),
         num_results: Cell::new(0),
+        scope_tree: TreeView::new(
+            &f,
+            &TreeViewOptions {
+                // has_lines: true,
+                full_row_select: true,
+                always_show_selection: true,
+                has_buttons: true,
+                checkboxes: true,
+                ..Default::default()
+            },
+        ),
+        status: f.create_status_bar(),
         monospace_font,
     });
+
+    let alpha = app.scope_tree.insert_root("Alpha")?;
+    alpha.insert_child("Zap")?;
+    alpha.insert_child("Dingbat")?;
+    let beta = app.scope_tree.insert_root("Beta")?;
+    let beta_courier = beta.insert_child("Courier")?;
+    let xyzzy = beta_courier.insert_child("Xyzzy")?;
+    // beta_courier.expand();
+    beta.insert_child("Ring")?;
+    // alpha.expand();
+    // beta.expand();
+    // beta_courier.delete();
+    xyzzy.ensure_visible();
+
+    app.scope_tree.on_selection_changed(EventHandler::new({
+        let app = app.clone();
+        move |_| {
+            app.status.set_status("Something got clicked!");
+        }
+    }));
 
     let edit = TextBox::new(&f);
     edit.set_text("cl.exe");
@@ -162,6 +196,17 @@ fn main() {
                 }
                 _ => {}
             }
+
+            app.messenger.run_background(
+                move || {
+                    info!("this is a background task");
+                    42
+                },
+                |result: std::thread::Result<u64>| match result {
+                    Ok(value) => info!("the background task completed.  on ui thread: {}", value),
+                    Err(e) => info!("background task panicked: {:?}", e),
+                },
+            );
         }
     }));
 
@@ -177,15 +222,8 @@ fn main() {
         }
     }));
 
-    let b3 = Button::new(&f);
-    b3.set_text("b3");
-    let b4 = Button::new(&f);
-    b4.set_text("b4");
-    let b5 = Button::new(&f);
-    b5.set_text("b5");
-
-    let label1 = Label::new(&f);
-    label1.set_text("Search (regex):");
+    let search_regex_label = Label::new(&f);
+    search_regex_label.set_text("Search (regex):");
 
     f.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis {
@@ -195,7 +233,7 @@ fn main() {
             cells: vec![
                 GridAxisCell::fixed(20),
                 GridAxisCell::fixed(350),
-                GridAxisCell::auto(400),
+                GridAxisCell::auto(40),
                 // GridAxisCell::fixed(30),
             ],
         },
@@ -205,14 +243,20 @@ fn main() {
             tail_margin: 10,
             cells: vec![
                 GridAxisCell::scaled(1.0, 600),
-                GridAxisCell::fixed(100),
-                // GridAxisCell::fixed(100), // labels
+                GridAxisCell::fixed(100), // labels
                 GridAxisCell::fixed(180), // buttons
             ],
         },
         items: vec![
             GridItem::new(1, 0, LayoutItem::Control(app.processes_list_view.clone())),
             GridItem::new(2, 0, LayoutItem::Control(app.process_detail_view.clone())),
+            GridItem {
+                row: 2,
+                row_span: 1,
+                col: 1,
+                col_span: 2,
+                item: LayoutItem::Control(app.scope_tree.clone()),
+            },
             GridItem {
                 row: 1,
                 row_span: 1,
@@ -224,7 +268,7 @@ fn main() {
                     pitch: 30,
                     padding: 4,
                     orientation: Orientation::Vertical,
-                    items: vec![LayoutItem::Control(label1)],
+                    items: vec![LayoutItem::Control(search_regex_label)],
                 }))),
             },
             GridItem {
@@ -244,9 +288,6 @@ fn main() {
                         LayoutItem::Control(close_button.clone()),
                         LayoutItem::Control(open_button.clone()),
                         LayoutItem::Control(save_button.clone()),
-                        LayoutItem::Control(b3.clone()),
-                        LayoutItem::Control(b4.clone()),
-                        LayoutItem::Control(b5.clone()),
                     ],
                 }))),
             },
@@ -256,18 +297,7 @@ fn main() {
     app.processes_list_view.on_click(EventHandler::new({
         let app = app.clone();
         move |_| {
-            info!("click");
-            let mut num_selected: u32 = 0;
-            let mut first: Option<usize> = None;
-            for i in app.processes_list_view.iter_selected_items() {
-                if num_selected == 0 {
-                    first = Some(i);
-                }
-                num_selected += 1;
-                break;
-            }
-
-            if let Some(first) = first {
+            if let Some(first) = app.processes_list_view.iter_selected_items().next() {
                 debug!("process key: {}", first);
                 let results_data = app.results_data.borrow();
                 if let Some(entry) = results_data.get(&first) {
@@ -367,6 +397,7 @@ fn main() {
     }));
 
     f.show_modal();
+    Ok(())
 }
 
 impl AppState {
@@ -409,7 +440,7 @@ impl AppState {
                 }
 
                 let mut results_data = self.results_data.borrow_mut();
-                debug!("inserting process data for item {}", item);
+                trace!("inserting process data for item {}", item);
                 results_data.insert(
                     item,
                     ProcessItem {

@@ -1,6 +1,5 @@
 use forms::layout::grid::*;
 use forms::*;
-use log::{error, info};
 use regex::Regex;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -24,7 +23,7 @@ fn main() {
     env_logger::init();
 
     let form = Form::builder()
-        .size(1024, 768)
+        .size(1600, 1200)
         .quit_on_close()
         .text("Search in Files")
         .build();
@@ -142,11 +141,6 @@ fn main() {
     let _worker = std::thread::spawn(move || {
         worker_thread(commands_receiver, response_tx);
     });
-
-    app.results
-        .on_selection_changed(EventHandler::new(move |_| {
-            info!("selection changed.");
-        }));
 
     form.show_modal();
 }

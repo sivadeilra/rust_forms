@@ -186,7 +186,7 @@ impl GridAxis {
                 CellSize::Scaled { scale, min, max } => {
                     // How much of the "extra" do we use for this one?
                     let proportion = *scale / scale_sum;
-                    let mut space_assigned =
+                    let space_assigned =
                         min + ((extra as f32 * proportion) as i32).max(extra_available);
                     // space_assigned = space_assigned.max(*min);
                     // space_assigned = space_assigned.min(*max);
@@ -194,8 +194,6 @@ impl GridAxis {
                     c_width = space_assigned;
                 }
             }
-
-            // trace!("- c_width {}", c_width);
 
             x += c_width;
 
@@ -216,7 +214,14 @@ impl GridAxis {
 }
 
 impl GridLayout {
-    pub fn place(&self, x: i32, y: i32, width: i32, height: i32) {
+    pub(crate) fn place(
+        &self,
+        placer: &mut dyn LayoutPlacer,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) {
         trace!("GridLayout: row_placement:");
         let row_placement = self.rows.place(height);
         trace!("GridLayout: col_placement:");
@@ -260,6 +265,7 @@ impl GridLayout {
             );
 
             item.item.place(
+                placer,
                 col_range.0,
                 row_range.0,
                 col_range.1 - col_range.0,

@@ -19,22 +19,16 @@ static_assertions::assert_not_impl_any!(Messenger: Send, Sync);
 struct MessengerState {
     hwnd: HWND,
     receivers: RefCell<Vec<Rc<dyn QueueReceiver>>>,
-    receiver: mpsc::Receiver<Message>,
-    sender: mpsc::Sender<Message>,
+    shared_state: Arc<Mutex<SharedState>>,
 }
 
-enum Message {
-    RunThis(Arc<dyn Fn()>),
-}
-
-struct AtomicState {
-    receivers: VecDeque<Arc<dyn QueueReceiver>>,
+struct SharedState {
+    run_on_main: VecDeque<Box<dyn QueueReceiver>>,
+    hwnd: HWND,
 }
 
 impl Messenger {
     pub fn new() -> Messenger {
-        let (tx, rx) = mpsc::channel::<Message>();
-
         unsafe {
             // Create the messaging window.
             let window_class_atom = register_class_lazy();
@@ -55,14 +49,16 @@ impl Messenger {
                 null(),
             );
             if hwnd == 0 {
-                panic!("Failed to create messaging window for AsyncExecutor");
+                panic!("Failed to create messaging window for Messenger");
             }
 
             let state: Rc<MessengerState> = Rc::new(MessengerState {
                 hwnd,
                 receivers: Default::default(),
-                receiver: rx,
-                sender: tx,
+                shared_state: Arc::new(Mutex::new(SharedState {
+                    run_on_main: VecDeque::new(),
+                    hwnd,
+                })),
             });
             let state_ptr: *const MessengerState = &*state;
 
@@ -129,38 +125,58 @@ extern "system" fn messenger_wndproc(
             return DefWindowProcW(hwnd, message, wparam, lparam);
         }
 
-        let state: *const MessengerState = state_ptr as *const MessengerState;
+        let state: &MessengerState = &*(state_ptr as *const MessengerState);
 
         match message {
             MESSENGER_WM_BACKGROUND_COMPLETION => {
                 trace!("MESSENGER_WM_BACKGROUND_COMPLETION");
+                /*
                 let header = lparam as *mut BackgroundContextHeader;
                 let completion_func = (*header).completion_func;
                 completion_func(header);
+                */
                 return 0;
             }
 
             MESSENGER_WM_POLL_PIPE_RECEIVERS => {
                 trace!("MESSENGER_WM_POLL_PIPE_RECEIVERS");
-                (*state).poll_receivers();
+                let mut i = 0;
+                loop {
+                    let receivers = state.receivers.borrow();
+                    if i >= receivers.len() {
+                        break;
+                    }
 
-                let state = &*state;
-                while let Ok(message) = state.receiver.try_recv() {
-                    match message {
-                        Message::RunThis(run_this) => {
-                            run_this();
-                            drop(run_this);
-                        }
+                    let receiver_rc = Rc::clone(&receivers[i]);
+                    drop(receivers); // drop dynamic borrow
+                    i += 1;
+
+                    // We drop the dynamic borrow of the receivers collection so that
+                    // we can safely call into this app callback, without worrying about
+                    // the app modifying the receiver set.
+                    receiver_rc.run_on_main_thread();
+                }
+
+                loop {
+                    let mut g = state.shared_state.lock().unwrap();
+                    let item_opt = g.run_on_main.pop_front();
+                    drop(g);
+
+                    if let Some(item) = item_opt {
+                        // It would be beneficial if we could call FnOnce() on
+                        // a boxed closure, or method of a trait object that
+                        // took `self`.
+                        item.run_on_main_thread();
+                        drop(item);
+                    } else {
+                        break;
                     }
                 }
+
                 return 0;
             }
 
-            WM_DESTROY => {}
-
-            _ => {
-                // allow default to run
-            }
+            _ => {}
         }
 
         DefWindowProcW(hwnd, message, wparam, lparam)
@@ -176,7 +192,7 @@ impl Drop for MessengerState {
 }
 
 struct BackgroundContextHeader {
-    completion_func: unsafe fn(header: *mut BackgroundContextHeader),
+    // completion_func: unsafe fn(header: *mut BackgroundContextHeader),
 }
 
 #[repr(C)] // want linear layout
@@ -184,8 +200,28 @@ struct BackgroundContext<Worker, WorkOutput, Finisher> {
     header: BackgroundContextHeader,
     hwnd: HWND,
     worker: MaybeUninit<Worker>,
-    output: MaybeUninit<std::thread::Result<WorkOutput>>,
-    finisher: MaybeUninit<Finisher>,
+    output: UnsafeCell<MaybeUninit<std::thread::Result<WorkOutput>>>,
+    finisher: UnsafeCell<MaybeUninit<Finisher>>,
+    shared_state: Arc<Mutex<SharedState>>,
+}
+
+impl<Worker, WorkOutput, Finisher> QueueReceiver for BackgroundContext<Worker, WorkOutput, Finisher>
+where
+    Worker: FnOnce() -> WorkOutput + 'static + Sync + Sync,
+    WorkOutput: Send + 'static,
+    Finisher: FnOnce(std::thread::Result<WorkOutput>) + 'static,
+{
+    fn run_on_main_thread(&self) {
+        // In this state:
+        // - 'worker' field is dead
+        // - 'output' field is live
+        // - 'finisher' field is live
+        unsafe {
+            let output = self.output.get().read().assume_init();
+            let finisher = self.finisher.get().read().assume_init();
+            finisher(output);
+        }
+    }
 }
 
 impl Messenger {
@@ -196,67 +232,75 @@ impl Messenger {
     pub fn run_background<Worker, WorkOutput, Finisher>(&self, worker: Worker, finisher: Finisher)
     where
         Worker: FnOnce() -> WorkOutput + 'static + Sync + Sync,
+        WorkOutput: Send + 'static,
         Finisher: FnOnce(std::thread::Result<WorkOutput>) + 'static,
     {
+        // This function runs in a worker (non-GUI) thread. It executes the
+        // work item that was provided to run_background (the `worker` value).
+        //
+        // The `parameter` points to BackgroundContext<...>. It owns an Arc
+        // strong reference count.
         unsafe extern "system" fn thread_routine<Worker, WorkOutput, Finisher>(
             parameter: *mut c_void,
         ) -> u32
         where
             Worker: FnOnce() -> WorkOutput + 'static + Sync + Sync,
+            WorkOutput: Send + 'static,
             Finisher: FnOnce(std::thread::Result<WorkOutput>) + 'static,
         {
-            let mut context = parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>;
+            let context: Box<BackgroundContext<Worker, WorkOutput, Finisher>> =
+                Box::from_raw(parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>);
 
-            (*context).output = MaybeUninit::new(catch_unwind(AssertUnwindSafe(move || {
-                let worker: Worker = (*context).worker.as_mut_ptr().read();
-                worker()
-            })));
+            // Unsafely read the worker from the context object, and then
+            // execute it. Then unsafely write its output to context.output.
+            let worker: Worker = context.worker.as_ptr().read();
+            let output = catch_unwind(AssertUnwindSafe(move || worker()));
 
-            // Now post it back to the main thread.
-            PostMessageW(
-                (*context).hwnd,
-                MESSENGER_WM_BACKGROUND_COMPLETION,
-                0,
-                parameter as LPARAM,
-            );
+            let shared_state = Arc::clone(&context.shared_state);
+
+            if let Ok(mut guard) = shared_state.lock() {
+                context.output.get().write(MaybeUninit::new(output));
+                let need_wake = guard.run_on_main.is_empty();
+                let hwnd = guard.hwnd;
+                guard.run_on_main.push_back(context);
+                drop(guard);
+
+                // If necessary, unblock the main thread. Note that there is a
+                // race condition here. The GUI thread could tear down the
+                // messaging window, while this work item is running. That means
+                // the window handle could become invalid. In that case, the
+                // most likely thing that would happen is that the PostMessage()
+                // call would use an invalid handle, but this would be safely
+                // detected. Still, it would be great if we could find a way
+                // to avoid this race condition.
+                if need_wake {
+                    PostMessageW(hwnd, MESSENGER_WM_POLL_PIPE_RECEIVERS, 0, 0);
+                }
+            } else {
+                // This is a pretty bad outcome. It means that another thread
+                // poisoned the mutex (panicked while holding the mutex).
+                // In this case, the finisher is never going to run, because we
+                // can't get a message back to the main thread.
+                warn!(
+                    "Failed to acquire shared state. Output of background task will be discarded."
+                );
+                drop(output);
+            }
 
             0
-        }
-
-        unsafe fn completion_func<Worker, WorkOutput, Finisher>(
-            parameter: *mut BackgroundContextHeader,
-        ) where
-            Worker: FnOnce() -> WorkOutput + 'static + Sync + Sync,
-            Finisher: FnOnce(std::thread::Result<WorkOutput>) + 'static,
-        {
-            // In this state:
-            // - 'worker' field is dead
-            // - 'output' field is live
-            // - 'finisher' field is live
-            let context = parameter as *mut BackgroundContext<Worker, WorkOutput, Finisher>;
-
-            let finisher = (*context).finisher.as_mut_ptr().read();
-            let output = (*context).output.as_mut_ptr().read();
-
-            // Free the memory for the context allocation before calling the
-            // finisher function. That way, we don't need to worry about what
-            // happens if that function panics. Since we know the full type,
-            // we can safely drop the box.
-            drop(Box::from_raw(context));
-
-            finisher(output);
         }
 
         unsafe {
             let context: Box<BackgroundContext<Worker, WorkOutput, Finisher>> =
                 Box::new(BackgroundContext {
                     header: BackgroundContextHeader {
-                        completion_func: completion_func::<Worker, WorkOutput, Finisher>,
+                        // completion_func: completion_func::<Worker, WorkOutput, Finisher>,
                     },
                     hwnd: self.state.hwnd,
                     worker: MaybeUninit::new(worker),
-                    finisher: MaybeUninit::new(finisher),
-                    output: MaybeUninit::zeroed(),
+                    finisher: UnsafeCell::new(MaybeUninit::new(finisher)),
+                    output: UnsafeCell::new(MaybeUninit::zeroed()),
+                    shared_state: self.state.shared_state.clone(),
                 });
             let context_ptr = Box::into_raw(context);
 
@@ -275,7 +319,7 @@ impl Messenger {
                 let context = Box::from_raw(context_ptr);
                 drop(context.worker.assume_init());
                 // do not drop 'output'; it is not live.
-                drop(context.finisher.assume_init());
+                drop(context.finisher.get().read().assume_init());
             }
         }
     }
@@ -388,7 +432,7 @@ impl Messenger {
     where
         M: Send + 'static,
     {
-        let queue_state = Arc::new(QueueState::<M> {
+        let queue = Arc::new(QueueState::<M> {
             messages: Mutex::new(VecDeque::new()),
             hwnd: self.state.hwnd,
         });
@@ -396,7 +440,7 @@ impl Messenger {
         // Create the UI-side state.
         let queue_receiver = Rc::new(ReceiverUIState::<M> {
             handler: handler,
-            queue: Arc::clone(&queue_state),
+            queue: Arc::clone(&queue),
             debug_description: debug_description.to_string(),
         });
 
@@ -406,29 +450,7 @@ impl Messenger {
             receivers.push(queue_receiver);
         }
 
-        Sender { queue: queue_state }
-    }
-}
-
-impl MessengerState {
-    // This runs in response to FORM_WM_POLL_PIPE_RECEIVERS. It polls all of them.
-    pub(crate) fn poll_receivers(&self) {
-        let mut i = 0;
-        loop {
-            let receivers = self.receivers.borrow();
-            if i >= receivers.len() {
-                break;
-            }
-
-            let receiver_rc = Rc::clone(&receivers[i]);
-            drop(receivers); // drop borrow
-            i += 1;
-
-            // We drop the dynamic borrow of the receivers collection so that
-            // we can safely call into this app callback, without worrying about
-            // the app modifying the receiver set.
-            receiver_rc.run_on_main_thread();
-        }
+        Sender { queue }
     }
 }
 
@@ -437,7 +459,7 @@ trait QueueReceiver {
 }
 
 impl<M> QueueReceiver for ReceiverUIState<M> {
-    // This runs on the UI thread, when we receive FORM_WM_POLL_RECEIVERS.
+    // This runs on the UI thread, when we receive MESSENGER_WM_POLL_RECEIVERS.
     fn run_on_main_thread(&self) {
         trace!("polling receiver: {}", self.debug_description);
         loop {

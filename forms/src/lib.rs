@@ -20,6 +20,7 @@ mod messenger;
 mod status_bar;
 mod system_params;
 mod text_box;
+mod tree_view;
 
 pub use app::*;
 pub use brush::{Brush, SysColor};
@@ -37,10 +38,12 @@ pub use menu::*;
 pub use messenger::{Messenger, Sender};
 pub use status_bar::*;
 pub use text_box::*;
+pub use tree_view::*;
 pub use windows::Win32::Foundation::RECTL as Rect;
 
 use core::cell::UnsafeCell;
 use core::ffi::c_void;
+use core::marker::PhantomData;
 use core::mem::{size_of, size_of_val, zeroed};
 use core::ptr::{null, null_mut};
 use ffi::*;
@@ -165,14 +168,6 @@ pub(crate) fn get_instance() -> HINSTANCE {
     }
 }
 
-fn rect_or_default(r: Option<&Rect>) -> Rect {
-    if let Some(r) = r {
-        *r
-    } else {
-        Default::default()
-    }
-}
-
 pub fn with<T, F: FnMut(&mut T)>(mut value: T, mut f: F) -> T {
     f(&mut value);
     value
@@ -189,3 +184,73 @@ pub trait With {
 }
 
 impl<T> With for T {}
+
+pub(crate) struct DeferWindowPosOp {
+    hdwp: HDWP,
+}
+
+// https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-deferwindowpos
+impl DeferWindowPosOp {
+    pub fn begin(n: i32) -> Result<Self> {
+        unsafe {
+            let hdwp = BeginDeferWindowPos(n);
+            if hdwp == 0 {
+                return Err(Error::Windows(GetLastError()));
+            } else {
+                return Ok(Self { hdwp });
+            }
+        }
+    }
+
+    pub fn defer(
+        &mut self,
+        hwnd: HWND,
+        hwnd_insert_after: HWND,
+        x: i32,
+        y: i32,
+        cx: i32,
+        cy: i32,
+        flags: u32,
+    ) {
+        unsafe {
+            self.hdwp = DeferWindowPos(self.hdwp, hwnd, hwnd_insert_after, x, y, cx, cy, flags);
+        }
+    }
+}
+
+impl Drop for DeferWindowPosOp {
+    fn drop(&mut self) {
+        unsafe {
+            EndDeferWindowPos(self.hdwp);
+        }
+    }
+}
+
+#[derive(Clone)]
+struct StuckToThread {
+    #[cfg(debug_assertions)]
+    thread_id: u32,
+    not_send: PhantomData<*mut u8>,
+}
+
+assert_not_impl_any!(StuckToThread: Sync, Send, Copy);
+
+impl StuckToThread {
+    pub fn new() -> Self {
+        Self {
+            thread_id: unsafe { GetCurrentThreadId() },
+            not_send: PhantomData,
+        }
+    }
+
+    pub fn check(&self) {
+        #[cfg(debug_assertions)]
+        {
+            let this_thread_id = unsafe { GetCurrentThreadId() };
+            debug_assert_eq!(
+                this_thread_id, self.thread_id,
+                "Expected this object to be used only on the thread that created it."
+            );
+        }
+    }
+}

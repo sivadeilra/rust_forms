@@ -17,7 +17,7 @@ impl TextBox {
         Self::new_with_options(parent, Default::default())
     }
 
-    pub fn new_with_options(parent: &Rc<Form>, options: TextBoxOptions) -> Rc<TextBox> {
+    pub fn new_with_options(form: &Rc<Form>, options: TextBoxOptions) -> Rc<TextBox> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
             let ex_style: u32 = 0;
@@ -36,13 +36,13 @@ impl TextBox {
             let handle = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name.as_ptr() as *mut _),
-                PWSTR(null_mut()), // text
+                PWSTR(null_mut()),
                 style,
                 0,
                 0,
                 0,
                 0,
-                Some(parent.handle.get()),
+                Some(form.handle()),
                 None,       // menu
                 None,       // instance
                 null_mut(), // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
@@ -52,18 +52,14 @@ impl TextBox {
                 panic!("Failed to create window");
             }
 
-            let control = ControlState {
-                form: Rc::downgrade(&parent),
-                handle,
-                layout: Default::default(),
-            };
+            let control = ControlState::new(form, handle);
 
             let this = Rc::new(TextBox {
                 control,
                 font: Default::default(),
             });
 
-            if let Some(font) = parent.get_default_edit_font() {
+            if let Some(font) = form.get_default_edit_font() {
                 this.set_font(font);
             }
 

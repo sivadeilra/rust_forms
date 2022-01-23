@@ -39,22 +39,9 @@ impl Label {
                 panic!("failed to create control window");
             }
 
-            let this = Rc::new(Label {
-                control: ControlState {
-                    handle: hwnd,
-                    layout: RefCell::new(ControlLayout::default()),
-                    form: Rc::downgrade(&form),
-                },
-                // font: Default::default(),
-            });
-
-            /*
-            if let Some(font) = form.get_default_button_font() {
-                this.set_font(font);
-            }
-            */
-
-            this
+            Rc::new(Label {
+                control: ControlState::new(form, hwnd),
+            })
         }
     }
 

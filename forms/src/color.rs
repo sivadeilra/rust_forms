@@ -27,6 +27,10 @@ impl ColorRef {
         | ((u & 0xff) << 16);
         Self(u)
     }
+
+    pub fn from_sys_color(c: SysColor) -> Self {
+        unsafe { Self(GetSysColor(c as u32)) }
+    }
 }
 
 macro_rules! well_known_colors {

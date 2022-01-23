@@ -70,6 +70,7 @@ impl<'a> FormBuilder<'a> {
             }
 
             let form_alloc: Rc<Form> = Rc::new(Form {
+                stuck: StuckToThread::new(),
                 handle: Cell::new(0),
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
@@ -80,7 +81,7 @@ impl<'a> FormBuilder<'a> {
                 layout: RefCell::new(None),
                 layout_min_size: Cell::new((0, 0)),
                 background_brush: Default::default(),
-                background_color: Cell::new(ColorRef::BLUE),
+                background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
                 status_bar: Cell::new(None),
             });
 
@@ -110,7 +111,7 @@ impl<'a> FormBuilder<'a> {
                 handle, form_alloc_ptr
             );
 
-            dbg!(SetWindowTheme(handle, PWSTR(null_mut()), PWSTR(null_mut())));
+            let _ = SetWindowTheme(handle, PWSTR(null_mut()), PWSTR(null_mut()));
 
             let htheme = OpenThemeData(handle, "BUTTON");
             if htheme != 0 {
@@ -126,7 +127,7 @@ impl<'a> FormBuilder<'a> {
                     warn!("part {}, failed to get theme color", part);
                 }
 
-                dbg!(GetThemeSysColor(htheme, COLOR_MENUTEXT as i32));
+                // dbg!(GetThemeSysColor(htheme, COLOR_MENUTEXT as i32));
             } else {
                 warn!("failed to open theme data for window");
             }
@@ -137,7 +138,7 @@ impl<'a> FormBuilder<'a> {
             // Store the window handle, now that we know it, in the FormState.
             form_alloc.handle.set(handle);
 
-            if let Ok(br) = Brush::from_color_ref(ColorRef::GREEN) {
+            if let Ok(br) = Brush::from_sys_color(SysColor::Window) {
                 form_alloc.background_brush.set(Some(br));
             }
 

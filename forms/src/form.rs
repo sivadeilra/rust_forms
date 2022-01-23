@@ -10,6 +10,8 @@ pub use builder::*;
 
 /// A top-level window.
 pub struct Form {
+    stuck: StuckToThread,
+
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
 
@@ -48,7 +50,13 @@ pub(crate) struct NotifyHandler {
 }
 
 pub(crate) trait NotifyHandlerTrait {
-    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> LRESULT;
+    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult;
+}
+
+pub(crate) enum NotifyResult {
+    #[allow(dead_code)]
+    Consumed(LRESULT),
+    NotConsumed,
 }
 
 impl Form {
@@ -57,10 +65,12 @@ impl Form {
     }
 
     pub(crate) fn handle(&self) -> HWND {
+        self.stuck.check();
         self.handle.get()
     }
 
     pub fn show_window(&self) {
+        self.stuck.check();
         self.ensure_layout_valid();
         unsafe {
             ShowWindow(self.handle(), SW_SHOW);
@@ -68,26 +78,32 @@ impl Form {
     }
 
     pub fn set_title(&self, text: &str) {
+        self.stuck.check();
         set_window_text(self.handle.get(), text);
     }
 
     pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
+        self.stuck.check();
         self.default_edit_font.set(font);
     }
 
     pub fn get_default_edit_font(&self) -> Option<Rc<Font>> {
+        self.stuck.check();
         clone_cell_opt_rc(&self.default_edit_font)
     }
 
     pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
+        self.stuck.check();
         self.default_button_font.set(font);
     }
 
     pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
+        self.stuck.check();
         clone_cell_opt_rc(&self.default_button_font)
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
+        self.stuck.check();
         unsafe {
             if let Some(menu) = menu {
                 let hmenu = menu.extract();
@@ -105,6 +121,7 @@ impl Form {
     }
 
     pub fn create_status_bar(self: &Rc<Self>) -> Rc<StatusBar> {
+        self.stuck.check();
         let sb = if let Some(sb) = self.status_bar.take() {
             sb
         } else {
@@ -115,6 +132,7 @@ impl Form {
     }
 
     pub fn get_status_bar(&self) -> Option<Rc<StatusBar>> {
+        self.stuck.check();
         if let Some(sb) = self.status_bar.take() {
             self.status_bar.set(Some(sb.clone()));
             Some(sb)
@@ -126,10 +144,12 @@ impl Form {
 
 impl Form {
     pub(crate) fn invalidate_layout(&self) {
+        self.stuck.check();
         self.is_layout_valid.set(false);
     }
 
     fn ensure_layout_valid(&self) {
+        self.stuck.check();
         if self.is_layout_valid.get() {
             trace!("layout is already valid");
             return;
@@ -162,12 +182,36 @@ impl Form {
                         layout_height -= sb_height;
                     }
 
+                    struct DeferredLayoutPlacer {
+                        op: DeferWindowPosOp,
+                    }
+
+                    impl LayoutPlacer for DeferredLayoutPlacer {
+                        fn place_control(
+                            &mut self,
+                            control: &ControlState,
+                            x: i32,
+                            y: i32,
+                            width: i32,
+                            height: i32,
+                        ) {
+                            self.op
+                                .defer(control.handle(), 0, x, y, width, height, SWP_NOZORDER);
+                        }
+                    }
+
+                    let mut deferred_placer = DeferredLayoutPlacer {
+                        op: DeferWindowPosOp::begin(10).unwrap(),
+                    };
+
                     layout.place(
+                        &mut deferred_placer,
                         client_rect.left,
                         client_rect.top,
                         client_rect.right - client_rect.left,
                         layout_height, // client_rect.bottom - client_rect.top,
                     );
+                    drop(deferred_placer);
                 }
                 self.is_layout_valid.set(true);
             } else {
@@ -177,6 +221,7 @@ impl Form {
     }
 
     pub fn set_layout(&self, layout: Layout) {
+        self.stuck.check();
         let mut layout_borrow = self.layout.borrow_mut();
         *layout_borrow = Some(layout);
         drop(layout_borrow);
@@ -188,6 +233,7 @@ impl Form {
 
 impl Form {
     pub fn show_modal(&self) {
+        self.stuck.check();
         self.show_window();
         self.event_loop();
     }
@@ -312,13 +358,9 @@ extern "system" fn form_wndproc(
                 let new_height = ((lparam >> 16) & 0xffff) as u32;
                 trace!("WM_SIZE: {} x {}", new_width, new_height);
 
-                let mut sb_height = 0;
                 if let Some(sb) = state.status_bar.take() {
                     state.status_bar.set(Some(sb.clone()));
                     SendMessageW(sb.handle(), WM_SIZE, 0, 0);
-                    let mut sb_rect: RECT = zeroed();
-                    GetClientRect(sb.handle(), &mut sb_rect);
-                    sb_height = sb_rect.bottom - sb_rect.top;
                 }
 
                 state.invalidate_layout();
@@ -367,15 +409,25 @@ extern "system" fn form_wndproc(
             WM_NOTIFY => {
                 let nmhdr_ptr: *mut NMHDR = lparam as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
+                if false {
+                    trace!(
+                        "WM_NOTIFY: code 0x{:x} hwnd_from 0x{:x}",
+                        (*nmhdr_ptr).code,
+                        hwnd_from
+                    );
+                }
                 // Look up the control by window handle.
                 let notify_handlers = state.notify_handlers.borrow();
                 if let Some(control) = notify_handlers.get(&hwnd_from) {
                     // Clone the Rc.
                     let cloned_control = control.handler.clone();
                     drop(notify_handlers); // drop dynamic borrow
-                    return cloned_control.wm_notify(wparam, nmhdr_ptr);
+                    match cloned_control.wm_notify(wparam, nmhdr_ptr) {
+                        NotifyResult::NotConsumed => {}
+                        NotifyResult::Consumed(result) => return result,
+                    }
                 } else {
-                    // debug!("WM_NOTIFY: received notification for unknown control window");
+                    debug!("WM_NOTIFY: received notification for unknown control window");
                     // return 0;
                 }
             }
@@ -431,7 +483,6 @@ extern "system" fn form_wndproc(
             }
 
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
-            #[cfg(nope)]
             WM_CTLCOLORSTATIC => {
                 let hdc = wparam as HDC;
                 let brush_opt = state.background_brush.take();

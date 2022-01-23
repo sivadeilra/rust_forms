@@ -17,14 +17,13 @@ impl Button {
     pub fn new(form: &Rc<Form>) -> Rc<Button> {
         unsafe {
             let parent_window = form.handle();
-            let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("BUTTON");
             let ex_style = 0;
 
             let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
-                PWSTR(window_name.as_ptr() as *mut _),
+                PWSTR(null_mut()),
                 WS_CHILD | WS_VISIBLE,
                 0,
                 0,
@@ -41,11 +40,7 @@ impl Button {
             }
 
             let this = Rc::new(Button {
-                control: ControlState {
-                    handle: hwnd,
-                    layout: RefCell::new(ControlLayout::default()),
-                    form: Rc::downgrade(&form),
-                },
+                control: ControlState::new(form, hwnd),
                 on_click: Cell::new(None),
                 font: Default::default(),
             });
@@ -55,8 +50,6 @@ impl Button {
                 let handler_rc: Rc<Button> = Rc::clone(&this);
                 event_handlers.insert(hwnd, handler_rc);
             }
-
-            // let controls = form.state.controls.borrow_mut();
 
             if let Some(font) = form.get_default_button_font() {
                 this.set_font(font);
@@ -68,7 +61,7 @@ impl Button {
 
     pub fn set_enabled(&self, value: bool) {
         unsafe {
-            EnableWindow(self.control.handle, value);
+            EnableWindow(self.control.handle(), value);
         }
     }
 

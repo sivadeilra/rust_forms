@@ -62,4 +62,5 @@ pub enum SysColor {
     HotLight = 26,
     Menu = 4,
     WindowFrame = 6,
+    Window = 5,
 }

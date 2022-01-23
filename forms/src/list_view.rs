@@ -46,14 +46,8 @@ impl ListView {
                 panic!("failed to create ListView window");
             }
 
-            debug!("created list view window 0x{:x}", hwnd);
-
             let state: Rc<ListView> = Rc::new(ListView {
-                control: ControlState {
-                    handle: hwnd,
-                    layout: RefCell::new(ControlLayout::default()),
-                    form: Rc::downgrade(&form),
-                },
+                control: ControlState::new(form, hwnd),
                 handlers: RefCell::new(Vec::new()),
             });
             form.invalidate_layout();
@@ -118,8 +112,6 @@ impl ListView {
             SendMessageW(self.control.handle(), LVM_DELETECOLUMN, index, 0);
         }
     }
-
-    // pub fn set_column_text(&self, column: usize, heading: &str) {}
 
     // Appearance properties
 
@@ -350,7 +342,7 @@ impl ListView {
 }
 
 impl NotifyHandlerTrait for ListView {
-    unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> LRESULT {
+    unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult {
         match (*nmhdr).code as i32 {
             // https://docs.microsoft.com/en-us/windows/win32/controls/nm-click-list-view
             NM_CLICK => {
@@ -361,11 +353,11 @@ impl NotifyHandlerTrait for ListView {
                         (h.handler)(item.into());
                     }
                 });
-                0
+                NotifyResult::NotConsumed
             }
             NM_DBLCLK => {
                 trace!("list view NM_DBLCLK");
-                0
+                NotifyResult::NotConsumed
             }
             NM_RCLICK => {
                 let item_ptr = nmhdr as *const NMITEMACTIVATE;
@@ -375,12 +367,12 @@ impl NotifyHandlerTrait for ListView {
                         (h.handler)(item.into());
                     }
                 });
-                0
+                NotifyResult::NotConsumed
             }
 
             _ => {
                 // trace!("unrecognized WM_NOTIFY");
-                0
+                NotifyResult::NotConsumed
             }
         }
     }
@@ -391,7 +383,7 @@ pub struct SetItem<'a> {
 }
 
 enum ListViewHandler {
-    SelectionChanged(EventHandler<SelectionChanged>),
+    // SelectionChanged(EventHandler<SelectionChanged>),
     ItemActivated(EventHandler<ItemActivated>),
     Click(EventHandler<ItemActivate>),
     RClick(EventHandler<ItemActivate>),

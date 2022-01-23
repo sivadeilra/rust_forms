@@ -27,7 +27,7 @@ impl Font {
             italic: false,
             underline: false,
             strikeout: false,
-            quality: FontQuality::AntiAliased,
+            quality: FontQuality::ClearType,
         }
     }
 }
@@ -49,17 +49,17 @@ impl<'a> FontBuilder<'a> {
             let hfont = CreateFontW(
                 self.height,
                 self.width,
-                0,                        // cescapement,
-                0,                        // corientation,
-                0,                        // cweight,
-                self.italic as u32,       // bitalic,
-                self.underline as u32,    // bunderline,
-                self.strikeout as u32,    // bstrikeout,
-                0,                        // icharset,
-                0,                        // ioutprecision,
-                0,                        // iclipprecision,
-                self.quality.to_native(), // iquality,
-                0,                        // ipitchandfamily,
+                0,                        // escapement,
+                0,                        // orientation,
+                0,                        // weight,
+                self.italic as u32,       // italic,
+                self.underline as u32,    // underline,
+                self.strikeout as u32,    // strikeout,
+                0,                        // charset,
+                0,                        // outprecision,
+                0,                        // clipprecision,
+                self.quality.to_native(), // quality,
+                0,                        // pitchandfamily,
                 PWSTR(face_name.as_ptr() as *mut _),
             );
 

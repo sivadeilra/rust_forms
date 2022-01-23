@@ -24,10 +24,17 @@ pub enum Layout {
 }
 
 impl Layout {
-    pub(crate) fn place(&self, x: i32, y: i32, width: i32, height: i32) {
+    pub(crate) fn place(
+        &self,
+        placer: &mut dyn LayoutPlacer,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) {
         match self {
-            Self::Grid(grid) => grid.place(x, y, width, height),
-            Self::Stack(stack) => stack.place(x, y, width, height),
+            Self::Grid(grid) => grid.place(placer, x, y, width, height),
+            Self::Stack(stack) => stack.place(placer, x, y, width, height),
         }
     }
 
@@ -66,19 +73,25 @@ impl core::fmt::Debug for LayoutItem {
 }
 
 impl LayoutItem {
-    pub(crate) fn place(&self, x: i32, y: i32, width: i32, height: i32) {
+    pub(crate) fn place(
+        &self,
+        placer: &mut dyn LayoutPlacer,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) {
         match self {
-            Self::Layout(nested_layout) => nested_layout.place(x, y, width, height),
+            Self::Layout(nested_layout) => nested_layout.place(placer, x, y, width, height),
             Self::Control(control) => {
-                control.set_rect(&Rect {
-                    left: x,
-                    top: y,
-                    right: x + width,
-                    bottom: y + height,
-                });
+                placer.place_control(control, x, y, width, height);
             }
         }
     }
+}
+
+pub(crate) trait LayoutPlacer {
+    fn place_control(&mut self, control: &ControlState, x: i32, y: i32, width: i32, height: i32);
 }
 
 pub enum HorizontalAlignment {
