@@ -48,7 +48,19 @@ impl<'a> FormBuilder<'a> {
 
     pub fn build(&self) -> Rc<Form> {
         init_common_controls();
+
         unsafe {
+            let co_initialized = match CoInitializeEx(null_mut(), COINIT_APARTMENTTHREADED) {
+                Ok(()) => {
+                    debug!("CoInitializeEx succeeded");
+                    true
+                }
+                Err(_) => {
+                    warn!("CoInitializeEx failed");
+                    false
+                }
+            };
+
             let window_class_atom = register_class_lazy();
             let instance = get_instance();
 
@@ -70,6 +82,7 @@ impl<'a> FormBuilder<'a> {
             }
 
             let form_alloc: Rc<Form> = Rc::new(Form {
+                co_initialized,
                 stuck: StuckToThread::new(),
                 handle: Cell::new(0),
                 quit_on_close: self.quit_on_close,

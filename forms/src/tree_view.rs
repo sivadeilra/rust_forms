@@ -40,7 +40,7 @@ impl TreeView {
             let class_name_wstr = WCString::from_str_truncate(WC_TREEVIEW);
             let ex_style = 0;
 
-            let mut style = WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER;
+            let mut style = WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER | WS_TABSTOP;
             if options.has_lines {
                 style |= TVS_HASLINES;
             }

@@ -11,8 +11,8 @@ struct AppState {
     results: Rc<ListView>,
     commands_sender: mpsc::Sender<WorkerCommand>,
     query_button: Rc<Button>,
-    root_directory: Rc<TextBox>,
-    regex: Rc<TextBox>,
+    root_directory: Rc<Edit>,
+    regex: Rc<Edit>,
     root_directory_label: Rc<Label>,
     regex_label: Rc<Label>,
     messenger: Messenger,
@@ -47,10 +47,10 @@ fn main() {
             w.set_text("Search");
             w.set_tab_stop(true);
         }),
-        root_directory: TextBox::new(&form).with(|w| {
+        root_directory: Edit::new(&form).with(|w| {
             w.set_text(r"d:\rust_forms\examples");
         }),
-        regex: TextBox::new(&form).with(|w| {
+        regex: Edit::new(&form).with(|w| {
             w.set_text("fn");
         }),
         root_directory_label: Label::new(&form).with(|w| {

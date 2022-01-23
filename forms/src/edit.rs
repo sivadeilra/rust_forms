@@ -1,23 +1,32 @@
 use super::*;
 
-pub struct TextBox {
+pub struct Edit {
     control: ControlState,
     font: Cell<Option<Rc<Font>>>,
 }
 
-impl core::ops::Deref for TextBox {
+#[derive(Default, Clone)]
+pub struct EditOptions {
+    pub multiline: bool,
+    pub readonly: bool,
+    pub vertical_scrollbar: bool,
+    pub no_hide_selection: bool,
+    pub want_return: bool,
+}
+
+impl core::ops::Deref for Edit {
     type Target = ControlState;
     fn deref(&self) -> &ControlState {
         &self.control
     }
 }
 
-impl TextBox {
-    pub fn new(parent: &Rc<Form>) -> Rc<TextBox> {
+impl Edit {
+    pub fn new(parent: &Rc<Form>) -> Rc<Edit> {
         Self::new_with_options(parent, Default::default())
     }
 
-    pub fn new_with_options(form: &Rc<Form>, options: TextBoxOptions) -> Rc<TextBox> {
+    pub fn new_with_options(form: &Rc<Form>, options: EditOptions) -> Rc<Edit> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
             let ex_style: u32 = 0;
@@ -27,10 +36,18 @@ impl TextBox {
                 style |= ES_READONLY as u32;
             }
             if options.multiline {
-                style |= ES_MULTILINE as u32;
+                style |= ES_MULTILINE as u32 | ES_AUTOVSCROLL as u32;
+            } else {
+                style |= ES_AUTOHSCROLL as u32;
+            }
+            if options.no_hide_selection {
+                style |= ES_NOHIDESEL as u32;
             }
             if options.vertical_scrollbar {
                 style |= WS_VSCROLL as u32;
+            }
+            if options.want_return {
+                style |= ES_WANTRETURN as u32;
             }
 
             let handle = CreateWindowExW(
@@ -54,7 +71,7 @@ impl TextBox {
 
             let control = ControlState::new(form, handle);
 
-            let this = Rc::new(TextBox {
+            let this = Rc::new(Edit {
                 control,
                 font: Default::default(),
             });
@@ -87,11 +104,15 @@ impl TextBox {
             SendMessageW(self.handle(), EM_SETREADONLY, value as WPARAM, 0);
         }
     }
-}
 
-#[derive(Default, Clone)]
-pub struct TextBoxOptions {
-    pub multiline: bool,
-    pub readonly: bool,
-    pub vertical_scrollbar: bool,
+    pub fn enable_autocomplete(&self) {
+        unsafe {
+            use Win32::UI::Shell::*;
+            let r = SHAutoComplete(
+                self.handle(),
+                SHACF_AUTOAPPEND_FORCE_OFF | SHACF_FILESYS_ONLY,
+            );
+            debug!("SHAutoComplete: {:?}", r);
+        }
+    }
 }

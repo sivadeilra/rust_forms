@@ -3,6 +3,7 @@ use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
 use log::debug;
 use std::sync::Once;
+use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
 mod builder;
 
@@ -11,6 +12,8 @@ pub use builder::*;
 /// A top-level window.
 pub struct Form {
     stuck: StuckToThread,
+
+    co_initialized: bool,
 
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
@@ -503,5 +506,19 @@ extern "system" fn form_wndproc(
         }
 
         DefWindowProcW(window, message, wparam, lparam)
+    }
+}
+
+impl Drop for Form {
+    fn drop(&mut self) {
+        self.stuck.check();
+
+        unsafe {
+            DestroyWindow(self.handle.get());
+
+            if self.co_initialized {
+                CoUninitialize();
+            }
+        }
     }
 }

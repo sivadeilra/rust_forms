@@ -17,7 +17,7 @@ struct AppState {
     path: RefCell<Option<String>>,
     form: Rc<Form>,
     processes_list_view: Rc<ListView>,
-    process_detail_view: Rc<TextBox>,
+    process_detail_view: Rc<Edit>,
     process_detail_sequence_number: Cell<u64>,
     results_context_menu: Rc<Menu>,
     scope_tree: Rc<TreeView>,
@@ -116,9 +116,9 @@ fn main() -> Result<()> {
             });
             Rc::new(m)
         },
-        process_detail_view: TextBox::new_with_options(
+        process_detail_view: Edit::new_with_options(
             &f,
-            TextBoxOptions {
+            EditOptions {
                 multiline: true,
                 readonly: true,
                 vertical_scrollbar: true,
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
         }
     }));
 
-    let edit = TextBox::new(&f);
+    let edit = Edit::new(&f);
     edit.set_text("cl.exe");
     edit.set_tab_stop(true);
 

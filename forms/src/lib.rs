@@ -19,7 +19,7 @@ mod menu;
 mod messenger;
 mod status_bar;
 mod system_params;
-mod text_box;
+mod edit;
 mod tree_view;
 
 pub use app::*;
@@ -37,7 +37,7 @@ pub use list_view::{ListView, Mode};
 pub use menu::*;
 pub use messenger::{Messenger, Sender};
 pub use status_bar::*;
-pub use text_box::*;
+pub use edit::*;
 pub use tree_view::*;
 pub use windows::Win32::Foundation::RECTL as Rect;
 
@@ -62,6 +62,7 @@ use windows::Win32::System::Threading::*;
 use windows::Win32::UI::Controls::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
 use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::Win32;
 
 // TODO: We currently leak these types. Fix that.
 pub use windows::Win32::Foundation::POINT;
@@ -238,11 +239,14 @@ assert_not_impl_any!(StuckToThread: Sync, Send, Copy);
 impl StuckToThread {
     pub fn new() -> Self {
         Self {
+            #[cfg(debug_assertions)]
             thread_id: unsafe { GetCurrentThreadId() },
             not_send: PhantomData,
         }
     }
 
+    #[cfg_attr(not(debug_assertions), inline(always))]
+    #[cfg_attr(debug_assertions, inline(never))]
     pub fn check(&self) {
         #[cfg(debug_assertions)]
         {

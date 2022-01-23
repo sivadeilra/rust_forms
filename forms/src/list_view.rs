@@ -31,7 +31,7 @@ impl ListView {
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
-                WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER,
+                WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER | WS_TABSTOP,
                 0,
                 0,
                 0,
