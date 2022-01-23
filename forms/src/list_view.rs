@@ -21,22 +21,21 @@ impl ListView {
         self.control.set_window_style(new_style);
     }
 
-    pub fn new(form: &Form, rect: Option<&Rect>) -> Rc<ListView> {
+    pub fn new(form: &Rc<Form>) -> Rc<ListView> {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
             let ex_style = 0;
-            let rect = rect_or_default(rect);
             let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
                 WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER,
-                rect.left,
-                rect.top,
-                rect.right - rect.left,
-                rect.bottom - rect.top,
+                0,
+                0,
+                0,
+                0,
                 parent_window,
                 0 as HMENU,
                 get_instance(),
@@ -53,13 +52,13 @@ impl ListView {
                 control: ControlState {
                     handle: hwnd,
                     layout: RefCell::new(ControlLayout::default()),
-                    form: Rc::downgrade(&form.state),
+                    form: Rc::downgrade(&form),
                 },
                 handlers: RefCell::new(Vec::new()),
             });
-            form.state.invalidate_layout();
+            form.invalidate_layout();
 
-            let mut notify_handlers = form.state.notify_handlers.borrow_mut();
+            let mut notify_handlers = form.notify_handlers.borrow_mut();
             let state_rc: Rc<ListView> = Rc::clone(&state);
             notify_handlers.insert(state.handle(), NotifyHandler { handler: state_rc });
             state
@@ -247,10 +246,12 @@ impl ListView {
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-insertitem
     pub fn insert_item(&self, text: &str) -> usize {
         unsafe {
+            let len = self.items_len();
+
             let textw = WCString::from_str_truncate(text);
             let mut lv_item: LVITEMW = zeroed();
+            lv_item.iItem = len as i32;
             lv_item.iSubItem = 0;
-            lv_item.iItem = 0;
             lv_item.mask |= LVIF_TEXT;
             lv_item.pszText = PWSTR(textw.as_ptr() as *mut u16);
             SendMessageW(
@@ -316,6 +317,7 @@ impl ListView {
     }
 
     // Events
+    #[cfg(todo)]
     pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {
         self.add_handler(ListViewHandler::SelectionChanged(handler));
     }

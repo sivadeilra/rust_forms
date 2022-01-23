@@ -29,3 +29,8 @@ pub const NM_TOOLTIPSCREATED: i32 = NM_FIRST - 19; // notify of when the tooltip
 pub const NM_LDOWN: i32 = NM_FIRST - 20;
 pub const NM_RDOWN: i32 = NM_FIRST - 21;
 pub const NM_THEMECHANGED: i32 = NM_FIRST - 22;
+
+pub const WM_CTLCOLORSTATIC: u32 = 0x0138;
+
+// vsstyle.h, not in winmd apparently
+pub const WP_DIALOG: i32 = 29;

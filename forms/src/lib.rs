@@ -2,21 +2,29 @@
 #![allow(unused_variables)]
 
 mod app;
+mod brush;
 mod button;
+mod color;
 mod control;
 mod error;
 mod executor;
 mod ffi;
+pub mod file_dialog;
 mod font;
 mod form;
 mod label;
 pub mod layout;
 pub mod list_view;
 mod menu;
+mod messenger;
+mod status_bar;
+mod system_params;
 mod text_box;
 
 pub use app::*;
+pub use brush::{Brush, SysColor};
 pub use button::*;
+pub use color::*;
 pub use control::*;
 pub use error::{Error, Result};
 pub use executor::*;
@@ -26,12 +34,14 @@ pub use label::Label;
 pub use layout::*;
 pub use list_view::{ListView, Mode};
 pub use menu::*;
+pub use messenger::{Messenger, Sender};
+pub use status_bar::*;
 pub use text_box::*;
 pub use windows::Win32::Foundation::RECTL as Rect;
 
 use core::cell::UnsafeCell;
 use core::ffi::c_void;
-use core::mem::{size_of, zeroed};
+use core::mem::{size_of, size_of_val, zeroed};
 use core::ptr::{null, null_mut};
 use ffi::*;
 use log::{debug, error, trace, warn};
@@ -105,12 +115,17 @@ pub(crate) fn get_window_text(hwnd: HWND) -> String {
 }
 
 fn init_common_controls() {
+    debug!("init_common_controls");
     INIT_COMMON_CONTROLS.call_once(|| unsafe {
+        debug!("calling InitCommonControls (in once)");
         let mut icc: INITCOMMONCONTROLSEX = zeroed();
         icc.dwSize = size_of::<INITCOMMONCONTROLSEX>() as u32;
-        icc.dwICC = ICC_LISTVIEW_CLASSES;
-        InitCommonControlsEx(&icc);
-        SetThemeAppProperties(STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT)
+        icc.dwICC = ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
+
+        let icc_result = InitCommonControlsEx(&icc).ok();
+        debug!("icc_result: {:?}", icc_result);
+
+        SetThemeAppProperties(STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT);
     });
 }
 

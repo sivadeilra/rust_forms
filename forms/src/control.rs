@@ -4,7 +4,7 @@ static_assertions::assert_not_impl_any!(ControlState: Send, Sync);
 
 pub struct ControlState {
     pub(crate) layout: RefCell<ControlLayout>,
-    pub(crate) form: Weak<FormState>,
+    pub(crate) form: Weak<Form>,
     pub(crate) handle: HWND,
 }
 
@@ -95,6 +95,7 @@ impl ControlState {
 
     pub(crate) fn set_window_style(&self, style: u32) {
         unsafe {
+            trace!("setting window style: 0x{:x}", style);
             SetWindowLongW(self.handle, GWL_STYLE, style as _);
         }
     }

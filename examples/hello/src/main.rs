@@ -16,6 +16,8 @@ struct AppState {
     regex: Rc<TextBox>,
     root_directory_label: Rc<Label>,
     regex_label: Rc<Label>,
+    messenger: Messenger,
+    status_bar: Rc<StatusBar>,
 }
 
 fn main() {
@@ -33,7 +35,7 @@ fn main() {
     let (commands_sender, commands_receiver) = mpsc::channel::<WorkerCommand>();
 
     let app: Rc<AppState> = Rc::new(AppState {
-        results: ListView::new(&form, None).with(|w| {
+        results: ListView::new(&form).with(|w| {
             w.set_view(Mode::Details);
             w.set_full_row_select(true);
             w.set_grid_lines(true);
@@ -42,22 +44,24 @@ fn main() {
         }),
 
         commands_sender,
-        query_button: Button::new(&form, None).with(|w| {
+        query_button: Button::new(&form).with(|w| {
             w.set_text("Search");
             w.set_tab_stop(true);
         }),
-        root_directory: TextBox::new(&form, None).with(|w| {
+        root_directory: TextBox::new(&form).with(|w| {
             w.set_text(r"d:\rust_forms\examples");
         }),
-        regex: TextBox::new(&form, None).with(|w| {
+        regex: TextBox::new(&form).with(|w| {
             w.set_text("fn");
         }),
-        root_directory_label: Label::new(&form, None).with(|w| {
+        root_directory_label: Label::new(&form).with(|w| {
             w.set_text("Root dir:");
         }),
-        regex_label: Label::new(&form, None).with(|w| {
+        regex_label: Label::new(&form).with(|w| {
             w.set_text("Regex:");
         }),
+        messenger: Messenger::new(),
+        status_bar: form.create_status_bar(),
     });
 
     // Set up layout.
@@ -107,6 +111,7 @@ fn main() {
             let regex_text = app.regex.get_text();
             match Regex::new(&regex_text) {
                 Ok(regex) => {
+                    app.status_bar.set_status("Running query...");
                     app.results.delete_all_items();
                     app.commands_sender
                         .send(WorkerCommand::Search {
@@ -118,7 +123,8 @@ fn main() {
                         .unwrap();
                 }
                 Err(e) => {
-                    error!("invalid regex: {:?}", e);
+                    app.status_bar
+                        .set_status(&format!("Invalid regex: {:?}", e));
                 }
             }
         }
@@ -126,15 +132,15 @@ fn main() {
 
     // Start our worker thread.
 
-    let response_sender = form.register_receiver_func::<WorkerResponse, _>("worker", {
+    let response_tx = app.messenger.register_receiver_func("worker", {
         let app = app.clone();
         move |message: WorkerResponse| {
             app.handle_worker_response(message);
         }
     });
 
-    let _worker_joiner = std::thread::spawn(move || {
-        worker_thread(commands_receiver, response_sender);
+    let _worker = std::thread::spawn(move || {
+        worker_thread(commands_receiver, response_tx);
     });
 
     app.results
@@ -142,16 +148,14 @@ fn main() {
             info!("selection changed.");
         }));
 
-    form.show_window();
-
-    event_loop();
+    form.show_modal();
 }
 
 impl AppState {
     fn handle_worker_response(self: &Rc<Self>, message: WorkerResponse) {
         match message {
             WorkerResponse::SearchDone => {
-                info!("search done");
+                self.status_bar.set_status("Done.");
             }
 
             WorkerResponse::FileError { file_path, error } => {

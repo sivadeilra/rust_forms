@@ -14,24 +14,22 @@ impl core::ops::Deref for Button {
 }
 
 impl Button {
-    pub fn new(form: &Form, rect: Option<&Rect>) -> Rc<Button> {
+    pub fn new(form: &Rc<Form>) -> Rc<Button> {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("BUTTON");
             let ex_style = 0;
 
-            let rect = rect_or_default(rect);
-
             let hwnd = CreateWindowExW(
                 ex_style,
                 PWSTR(class_name_wstr.as_ptr() as *mut _),
                 PWSTR(window_name.as_ptr() as *mut _),
-                WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER,
-                rect.left,
-                rect.top,
-                rect.right - rect.left,
-                rect.bottom - rect.top,
+                WS_CHILD | WS_VISIBLE,
+                0,
+                0,
+                0,
+                0,
                 parent_window,
                 0 as HMENU,     // hmenu,
                 get_instance(), // hinstance,
@@ -46,14 +44,14 @@ impl Button {
                 control: ControlState {
                     handle: hwnd,
                     layout: RefCell::new(ControlLayout::default()),
-                    form: Rc::downgrade(&form.state),
+                    form: Rc::downgrade(&form),
                 },
                 on_click: Cell::new(None),
                 font: Default::default(),
             });
 
             {
-                let mut event_handlers = form.state.event_handlers.borrow_mut();
+                let mut event_handlers = form.event_handlers.borrow_mut();
                 let handler_rc: Rc<Button> = Rc::clone(&this);
                 event_handlers.insert(hwnd, handler_rc);
             }

@@ -188,8 +188,8 @@ impl GridAxis {
                     let proportion = *scale / scale_sum;
                     let mut space_assigned =
                         min + ((extra as f32 * proportion) as i32).max(extra_available);
-                    space_assigned = space_assigned.max(*min);
-                    space_assigned = space_assigned.min(*max);
+                    // space_assigned = space_assigned.max(*min);
+                    // space_assigned = space_assigned.min(*max);
                     extra_available -= space_assigned;
                     c_width = space_assigned;
                 }

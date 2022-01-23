@@ -2,18 +2,35 @@ use super::*;
 use regex::Regex;
 
 #[derive(Debug)]
-pub(crate) enum WorkerResponse {
-    OpenFailed(trace_reader::Error),
-    OpenSucceeded,
-    QueryResult { dir: String, name: String },
-    QueryDone,
-}
-
-#[derive(Debug)]
 pub(crate) enum WorkerCommand {
     OpenTraceFile(String),
     CloseTraceFile,
-    Query { regex: Regex, max_results: u32 },
+    Query {
+        regex: Regex,
+        max_results: u32,
+    },
+    GetProcessDetail {
+        sequence_number: u64,
+        command_string_offset: StringIndex,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) enum WorkerResponse {
+    OpenFailed(trace_reader::Error),
+    OpenSucceeded,
+    QueryResult {
+        dir: String,
+        name: String,
+        command_string_offset: StringIndex,
+    },
+    QueryDone {
+        num_records_scanned: u64,
+    },
+    ProcessDetail {
+        sequence_number: u64,
+        command_string: String,
+    },
 }
 
 pub(crate) fn worker_thread(
@@ -21,9 +38,9 @@ pub(crate) fn worker_thread(
     mut responses: Sender<WorkerResponse>,
 ) {
     let mut trace_file_opt: Option<TraceFile> = None;
+    let mut process_strings: Option<trace_reader::StringTable> = None;
 
     while let Ok(command) = commands.recv() {
-        trace!("worker received command: {:?}", command);
         match command {
             WorkerCommand::OpenTraceFile(filename) => {
                 // Drop the existing trace file.
@@ -45,11 +62,38 @@ pub(crate) fn worker_thread(
             }
 
             WorkerCommand::Query { regex, max_results } => {
+                let mut num_records_scanned: u64 = 0;
                 if let Some(trace_file) = trace_file_opt.as_mut() {
-                    let _ = process_query(&regex, max_results, trace_file, &mut responses);
+                    let _ = process_query(
+                        &regex,
+                        max_results,
+                        trace_file,
+                        &mut responses,
+                        &mut process_strings,
+                        &mut num_records_scanned,
+                    );
                 }
 
-                responses.send(WorkerResponse::QueryDone);
+                responses.send(WorkerResponse::QueryDone {
+                    num_records_scanned,
+                });
+            }
+
+            WorkerCommand::GetProcessDetail {
+                sequence_number,
+                command_string_offset,
+            } => {
+                let command_string = if let Some(process_strings) = process_strings.as_mut() {
+                    process_strings
+                        .get_string(command_string_offset)
+                        .to_string()
+                } else {
+                    "<error>".to_string()
+                };
+                responses.send(WorkerResponse::ProcessDetail {
+                    sequence_number,
+                    command_string,
+                });
             }
         }
     }
@@ -60,6 +104,8 @@ fn process_query(
     max_results: u32,
     trace_file: &mut TraceFile,
     responses: &mut Sender<WorkerResponse>,
+    process_strings_opt: &mut Option<StringTable>,
+    num_records_scanned: &mut u64,
 ) -> trace_reader::Result<()> {
     let (mut process_strings, process_table) = trace_file.read_process_table()?;
 
@@ -67,6 +113,8 @@ fn process_query(
 
     for entry in process_table {
         let command_string = process_strings.get_string(entry.command_string_offset);
+
+        *num_records_scanned += 1;
 
         if query.is_match(command_string) {
             let name = process_strings
@@ -76,7 +124,11 @@ fn process_query(
                 .get_string(entry.path_string_offset)
                 .to_string();
 
-            responses.send(WorkerResponse::QueryResult { name, dir });
+            responses.send(WorkerResponse::QueryResult {
+                name,
+                dir,
+                command_string_offset: entry.command_string_offset,
+            });
 
             num_results += 1;
             if num_results == max_results {
@@ -84,6 +136,9 @@ fn process_query(
             }
         }
     }
+
+    // Keep the string table, so we can answer queries about process details.
+    *process_strings_opt = Some(process_strings);
 
     Ok(())
 }

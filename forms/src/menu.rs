@@ -50,7 +50,7 @@ impl Menu {
         unsafe {
             let flags = 0;
 
-            if TrackPopupMenu(self.hmenu, flags, x, y, 0, form.state.handle.get(), null()).into() {
+            if TrackPopupMenu(self.hmenu, flags, x, y, 0, form.handle.get(), null()).into() {
                 debug!("TrackPopupMenu succeeded");
             } else {
                 // debug!("TrackPopupMenu failed");

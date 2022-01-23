@@ -18,8 +18,6 @@ impl<'a> Default for FormBuilder<'a> {
 
 impl<'a> FormBuilder<'a> {
     pub fn new() -> Self {
-        init_common_controls();
-
         Self::default()
     }
 
@@ -48,7 +46,8 @@ impl<'a> FormBuilder<'a> {
         self
     }
 
-    pub fn build(&self) -> Form {
+    pub fn build(&self) -> Rc<Form> {
+        init_common_controls();
         unsafe {
             let window_class_atom = register_class_lazy();
             let instance = get_instance();
@@ -70,7 +69,7 @@ impl<'a> FormBuilder<'a> {
                 height = h;
             }
 
-            let form_alloc: Rc<FormState> = Rc::new(FormState {
+            let form_alloc: Rc<Form> = Rc::new(Form {
                 handle: Cell::new(0),
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
@@ -78,12 +77,14 @@ impl<'a> FormBuilder<'a> {
                 event_handlers: RefCell::new(HashMap::new()),
                 default_edit_font: Default::default(),
                 default_button_font: Default::default(),
-                receivers: Default::default(),
                 layout: RefCell::new(None),
                 layout_min_size: Cell::new((0, 0)),
+                background_brush: Default::default(),
+                background_color: Cell::new(ColorRef::BLUE),
+                status_bar: Cell::new(None),
             });
 
-            let form_alloc_ptr: *const FormState = &*form_alloc;
+            let form_alloc_ptr: *const Form = &*form_alloc;
 
             let handle = CreateWindowExW(
                 ex_style,
@@ -109,10 +110,40 @@ impl<'a> FormBuilder<'a> {
                 handle, form_alloc_ptr
             );
 
+            dbg!(SetWindowTheme(handle, PWSTR(null_mut()), PWSTR(null_mut())));
+
+            let htheme = OpenThemeData(handle, "BUTTON");
+            if htheme != 0 {
+                debug!("ooo, got theme data");
+
+                const BP_CHECKBOX: i32 = 3;
+                const CBS_CHECKEDNORMAL: i32 = 5;
+
+                let part = BP_CHECKBOX;
+                if let Ok(color) = GetThemeColor(htheme, part, CBS_CHECKEDNORMAL, 0) {
+                    debug!("part {}, got theme color: 0x{:x}", part, color);
+                } else {
+                    warn!("part {}, failed to get theme color", part);
+                }
+
+                dbg!(GetThemeSysColor(htheme, COLOR_MENUTEXT as i32));
+            } else {
+                warn!("failed to open theme data for window");
+            }
+
+            let htheme = GetWindowTheme(handle);
+            debug!("htheme: 0x{:x}", htheme);
+
             // Store the window handle, now that we know it, in the FormState.
             form_alloc.handle.set(handle);
 
-            Form { state: form_alloc }
+            if let Ok(br) = Brush::from_color_ref(ColorRef::GREEN) {
+                form_alloc.background_brush.set(Some(br));
+            }
+
+            SendMessageW(handle, WM_THEMECHANGED, 0, 0);
+
+            form_alloc
         }
     }
 }

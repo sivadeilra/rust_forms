@@ -357,7 +357,9 @@ static mut EXECUTOR_CLASS_ATOM: ATOM = 0;
 
 const EXECUTOR_CLASS_NAME: &str = "RustForms_AsyncExecutor";
 
-const EXECUTOR_WM_POLL: u32 = WM_USER;
+const EXECUTOR_WM_POLL: u32 = WM_USER + 0;
+const FORM_WM_BACKGROUND_COMPLETION: u32 = WM_USER + 1;
+const FORM_WM_POLL_PIPE_RECEIVERS: u32 = WM_USER + 2;
 
 fn register_class_lazy() -> ATOM {
     REGISTER_CLASS_ONCE.call_once(|| unsafe {
@@ -417,7 +419,6 @@ extern "system" fn executor_wndproc(
             }
 
             WM_DESTROY => {
-                trace!("WM_DESTROY");
                 return 0;
             }
 

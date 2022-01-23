@@ -4,27 +4,12 @@ use core::ptr::null_mut;
 use log::debug;
 use std::sync::Once;
 
-mod bg;
 mod builder;
-mod pipe;
 
 pub use builder::*;
-pub use pipe::Sender;
 
 /// A top-level window.
-///
-/// The `Clone` implementation for this type clones a reference to the form,
-/// not the contents of the form. This allows event handlers to capture state,
-/// if needed.
-#[derive(Clone)]
 pub struct Form {
-    pub(crate) state: Rc<FormState>,
-}
-
-assert_not_impl_any!(Form: Send, Sync);
-
-/// This is the data that is pointed-to by the window user data field.
-pub(crate) struct FormState {
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
 
@@ -38,8 +23,13 @@ pub(crate) struct FormState {
     pub(crate) event_handlers: RefCell<HashMap<HWND, Rc<dyn MessageHandlerTrait>>>,
     pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
-    pub(crate) receivers: RefCell<Vec<Rc<dyn pipe::QueueReceiver>>>,
+    pub(crate) background_brush: Cell<Option<Brush>>,
+    pub(crate) background_color: Cell<ColorRef>,
+
+    status_bar: Cell<Option<Rc<StatusBar>>>,
 }
+
+assert_not_impl_any!(Form: Send, Sync);
 
 pub(crate) trait MessageHandlerTrait: 'static {
     fn wm_command(&self, control_id: u16, notify_code: u16) -> LRESULT {
@@ -67,47 +57,45 @@ impl Form {
     }
 
     pub(crate) fn handle(&self) -> HWND {
-        self.state.handle.get()
+        self.handle.get()
     }
 
     pub fn show_window(&self) {
-        self.state.ensure_layout_valid();
+        self.ensure_layout_valid();
         unsafe {
             ShowWindow(self.handle(), SW_SHOW);
         }
     }
 
     pub fn set_title(&self, text: &str) {
-        set_window_text(self.state.handle.get(), text);
+        set_window_text(self.handle.get(), text);
     }
 
     pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
-        self.state.default_edit_font.set(font);
+        self.default_edit_font.set(font);
     }
 
     pub fn get_default_edit_font(&self) -> Option<Rc<Font>> {
-        clone_cell_opt_rc(&self.state.default_edit_font)
+        clone_cell_opt_rc(&self.default_edit_font)
     }
 
     pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
-        self.state.default_button_font.set(font);
+        self.default_button_font.set(font);
     }
 
     pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
-        clone_cell_opt_rc(&self.state.default_button_font)
+        clone_cell_opt_rc(&self.default_button_font)
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
         unsafe {
             if let Some(menu) = menu {
                 let hmenu = menu.extract();
-                if SetMenu(self.state.handle.get(), hmenu).into() {
-                    debug!("successfully set menu for form");
-                } else {
+                if !SetMenu(self.handle.get(), hmenu).as_bool() {
                     warn!("failed to set menu for form: {}", GetLastError());
                 }
             } else {
-                if SetMenu(self.state.handle.get(), 0).into() {
+                if SetMenu(self.handle.get(), 0).as_bool() {
                     trace!("cleared menu for form");
                 } else {
                     warn!("failed to clear menu for form");
@@ -116,15 +104,27 @@ impl Form {
         }
     }
 
-    pub fn set_layout(&self, layout: Layout) {
-        self.state.set_layout(layout);
+    pub fn create_status_bar(self: &Rc<Self>) -> Rc<StatusBar> {
+        let sb = if let Some(sb) = self.status_bar.take() {
+            sb
+        } else {
+            StatusBar::new(self)
+        };
+        self.status_bar.set(Some(sb.clone()));
+        sb
+    }
+
+    pub fn get_status_bar(&self) -> Option<Rc<StatusBar>> {
+        if let Some(sb) = self.status_bar.take() {
+            self.status_bar.set(Some(sb.clone()));
+            Some(sb)
+        } else {
+            None
+        }
     }
 }
 
-const FORM_WM_BACKGROUND_COMPLETION: u32 = WM_USER + 0;
-const FORM_WM_POLL_PIPE_RECEIVERS: u32 = WM_USER + 1;
-
-impl FormState {
+impl Form {
     pub(crate) fn invalidate_layout(&self) {
         self.is_layout_valid.set(false);
     }
@@ -136,6 +136,15 @@ impl FormState {
         }
 
         unsafe {
+            let mut sb_height = 0;
+            if let Some(sb) = self.status_bar.take() {
+                self.status_bar.set(Some(sb.clone()));
+                SendMessageW(sb.handle(), WM_SIZE, 0, 0);
+                let mut sb_rect: RECT = zeroed();
+                GetClientRect(sb.handle(), &mut sb_rect);
+                sb_height = sb_rect.bottom - sb_rect.top;
+            }
+
             let mut client_rect: RECT = zeroed();
             if GetClientRect(self.handle.get(), &mut client_rect).into() {
                 debug!(
@@ -148,11 +157,16 @@ impl FormState {
                     let min_size = layout.get_min_size();
                     self.layout_min_size.set(min_size);
 
+                    let mut layout_height = client_rect.bottom - client_rect.top;
+                    if layout_height >= sb_height {
+                        layout_height -= sb_height;
+                    }
+
                     layout.place(
                         client_rect.left,
                         client_rect.top,
                         client_rect.right - client_rect.left,
-                        client_rect.bottom - client_rect.top,
+                        layout_height, // client_rect.bottom - client_rect.top,
                     );
                 }
                 self.is_layout_valid.set(true);
@@ -172,6 +186,38 @@ impl FormState {
     }
 }
 
+impl Form {
+    pub fn show_modal(&self) {
+        self.show_window();
+        self.event_loop();
+    }
+
+    fn event_loop(&self) {
+        unsafe {
+            loop {
+                let mut msg: MSG = zeroed();
+                let ret = GetMessageW(&mut msg, 0, 0, 0).0;
+                if ret < 0 {
+                    debug!("event loop: GetMessageW returned {}, quitting", ret);
+                    break;
+                }
+
+                if msg.message == WM_QUIT {
+                    debug!("found WM_QUIT, quitting");
+                    break;
+                }
+
+                if IsDialogMessageW(self.handle(), &msg).into() {
+                    continue;
+                }
+
+                TranslateMessage(&mut msg);
+                DispatchMessageW(&mut msg);
+            }
+        }
+    }
+}
+
 static REGISTER_CLASS_ONCE: Once = Once::new();
 static mut FORM_CLASS_ATOM: ATOM = 0;
 
@@ -188,7 +234,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.hInstance = instance;
         class_ex.lpszClassName = PWSTR(class_name_wstr.as_mut_ptr());
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
-        class_ex.hbrBackground = (COLOR_WINDOWFRAME + 1) as _;
+        class_ex.hbrBackground = (COLOR_WINDOW + 1) as _;
         class_ex.lpfnWndProc = Some(form_wndproc);
         class_ex.hCursor = LoadCursorW(0isize, IDC_ARROW);
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
@@ -237,7 +283,7 @@ extern "system" fn form_wndproc(
             return DefWindowProcW(window, message, wparam, lparam);
         }
 
-        let state: &FormState = &*(state_ptr as *const FormState);
+        let state: &Form = &*(state_ptr as *const Form);
 
         match message {
             /*
@@ -266,22 +312,19 @@ extern "system" fn form_wndproc(
                 let new_height = ((lparam >> 16) & 0xffff) as u32;
                 trace!("WM_SIZE: {} x {}", new_width, new_height);
 
+                let mut sb_height = 0;
+                if let Some(sb) = state.status_bar.take() {
+                    state.status_bar.set(Some(sb.clone()));
+                    SendMessageW(sb.handle(), WM_SIZE, 0, 0);
+                    let mut sb_rect: RECT = zeroed();
+                    GetClientRect(sb.handle(), &mut sb_rect);
+                    sb_height = sb_rect.bottom - sb_rect.top;
+                }
+
                 state.invalidate_layout();
                 state.ensure_layout_valid();
 
-                return 0;
-            }
-
-            FORM_WM_BACKGROUND_COMPLETION => {
-                trace!("FORM_WM_BACKGROUND_COMPLETION");
-                Form::finish_background(lparam);
-                return 0;
-            }
-
-            FORM_WM_POLL_PIPE_RECEIVERS => {
-                trace!("FORM_WM_POLL_PIPE_RECEIVERS");
-                state.poll_receivers();
-                return 0;
+                // return 0;
             }
 
             WM_COMMAND => {
@@ -314,7 +357,7 @@ extern "system" fn form_wndproc(
                     }
                 } else {
                     debug!("WM_COMMAND: 0x{:x}", wparam);
-                    return 0;
+                    // return 0;
                 }
             }
 
@@ -333,7 +376,7 @@ extern "system" fn form_wndproc(
                     return cloned_control.wm_notify(wparam, nmhdr_ptr);
                 } else {
                     // debug!("WM_NOTIFY: received notification for unknown control window");
-                    return 0;
+                    // return 0;
                 }
             }
 
@@ -385,6 +428,22 @@ extern "system" fn form_wndproc(
                         _ => {}
                     }
                 }
+            }
+
+            // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
+            #[cfg(nope)]
+            WM_CTLCOLORSTATIC => {
+                let hdc = wparam as HDC;
+                let brush_opt = state.background_brush.take();
+                if let Some(brush) = brush_opt.as_ref() {
+                    let hbrush = brush.handle();
+                    SelectObject(hdc, hbrush);
+                    state.background_brush.set(brush_opt);
+                    SetBkColor(hdc, state.background_color.get().as_u32());
+                    return hbrush;
+                }
+
+                return 0;
             }
 
             _ => {
