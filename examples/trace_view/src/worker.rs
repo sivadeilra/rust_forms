@@ -1,5 +1,6 @@
 use super::*;
 use regex::Regex;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub(crate) enum WorkerCommand {
@@ -26,6 +27,7 @@ pub(crate) enum WorkerResponse {
     },
     QueryDone {
         num_records_scanned: u64,
+        elapsed: Duration,
     },
     ProcessDetail {
         sequence_number: u64,
@@ -63,6 +65,7 @@ pub(crate) fn worker_thread(
 
             WorkerCommand::Query { regex, max_results } => {
                 let mut num_records_scanned: u64 = 0;
+                let time_started = Instant::now();
                 if let Some(trace_file) = trace_file_opt.as_mut() {
                     let _ = process_query(
                         &regex,
@@ -73,9 +76,11 @@ pub(crate) fn worker_thread(
                         &mut num_records_scanned,
                     );
                 }
+                let elapsed = time_started.elapsed();
 
                 responses.send(WorkerResponse::QueryDone {
                     num_records_scanned,
+                    elapsed,
                 });
             }
 

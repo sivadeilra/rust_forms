@@ -1,4 +1,5 @@
 use super::*;
+use core::any::Any;
 
 impl core::ops::Deref for TreeView {
     type Target = ControlState;
@@ -91,7 +92,12 @@ impl TreeView {
 
             let mut notify_handlers = form.notify_handlers.borrow_mut();
             let state_rc: Rc<TreeView> = Rc::clone(&state);
-            notify_handlers.insert(state.handle(), NotifyHandler { handler: state_rc });
+            notify_handlers.insert(
+                state.handle(),
+                NotifyHandler {
+                    handler: Rc::new(TreeViewNotifyShim { tree: state_rc }),
+                },
+            );
             state
         }
     }
@@ -153,6 +159,7 @@ impl TreeView {
             let state = Rc::new(NodeState {
                 hitem,
                 deleted: Cell::new(false),
+                data: RefCell::new(None),
             });
 
             {
@@ -204,6 +211,7 @@ pub struct TreeNode {
 struct NodeState {
     hitem: isize, // native pointer to tree view node
     deleted: Cell<bool>,
+    data: RefCell<Option<Box<dyn Any>>>,
 }
 
 impl TreeNode {
@@ -213,6 +221,32 @@ impl TreeNode {
         }
 
         self.tree.insert_at(self.state.hitem, item)
+    }
+
+    pub fn data(&self) -> &RefCell<Option<Box<dyn Any>>> {
+        &self.state.data
+    }
+
+    pub fn set_data_opt(&self, data: Option<Box<dyn Any>>) {
+        *self.state.data.borrow_mut() = data;
+    }
+
+    pub fn set_data<T: Any>(&self, value: T) {
+        let b = Box::new(value);
+        *self.state.data.borrow_mut() = Some(b);
+    }
+
+    pub fn take_data(&self) -> Option<Box<dyn Any>> {
+        let mut b = self.state.data.borrow_mut();
+        b.take()
+    }
+
+    pub fn borrow_data(&self) -> std::cell::Ref<'_, Option<Box<dyn Any>>> {
+        self.state.data.borrow()
+    }
+
+    pub fn borrow_data_mut(&self) -> std::cell::Ref<'_, Option<Box<dyn Any>>> {
+        self.state.data.borrow()
     }
 
     pub fn delete(&self) {
@@ -355,7 +389,11 @@ fn remove_items_rec(hwnd: HWND, hitem: HTREEITEM, items: &mut HashMap<HTREEITEM,
     }
 }
 
-impl NotifyHandlerTrait for TreeView {
+struct TreeViewNotifyShim {
+    tree: Rc<TreeView>,
+}
+
+impl NotifyHandlerTrait for TreeViewNotifyShim {
     unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult {
         match (*nmhdr).code as i32 {
             /*
@@ -383,10 +421,36 @@ impl NotifyHandlerTrait for TreeView {
             #[allow(irrefutable_let_patterns)] // todo
             TVN_SELCHANGEDW => {
                 trace!("TVN_SELCHANGEDW");
-                self.for_all_handlers(|h| {
+                self.tree.for_all_handlers(|h| {
                     if let TreeViewHandler::SelectionChanged(h) = h {
                         trace!("calling SelectionChanged event handler");
-                        (h.handler)(SelectionChanged);
+
+                        unsafe {
+                            let selected_hitem: HTREEITEM = SendMessageW(
+                                self.tree.handle(),
+                                TVM_GETNEXTITEM,
+                                TVGN_CARET as WPARAM,
+                                0 as LPARAM,
+                            )
+                                as HTREEITEM;
+
+                            let selected_node: Option<TreeNode>;
+                            if selected_hitem != 0 {
+                                let items = self.tree.items.borrow();
+                                if let Some(n) = items.get(&selected_hitem) {
+                                    selected_node = Some(TreeNode {
+                                        tree: Rc::clone(&self.tree),
+                                        state: Rc::clone(n),
+                                    });
+                                } else {
+                                    selected_node = None;
+                                }
+                            } else {
+                                selected_node = None;
+                            }
+
+                            (h.handler)(SelectionChanged(selected_node));
+                        }
                     }
                 });
 
@@ -416,7 +480,7 @@ impl NotifyHandlerTrait for TreeView {
     }
 }
 
-pub struct SelectionChanged;
+pub struct SelectionChanged(pub Option<TreeNode>);
 
 enum TreeViewHandler {
     SelectionChanged(EventHandler<SelectionChanged>),

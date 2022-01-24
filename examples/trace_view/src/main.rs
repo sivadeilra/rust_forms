@@ -158,6 +158,7 @@ fn main() -> Result<()> {
     let beta = app.scope_tree.insert_root("Beta")?;
     let beta_courier = beta.insert_child("Courier")?;
     let xyzzy = beta_courier.insert_child("Xyzzy")?;
+    xyzzy.set_data("this is some stuff".to_string());
     // beta_courier.expand();
     beta.insert_child("Ring")?;
     // alpha.expand();
@@ -167,8 +168,24 @@ fn main() -> Result<()> {
 
     app.scope_tree.on_selection_changed(EventHandler::new({
         let app = app.clone();
-        move |_| {
-            app.status.set_status("Something got clicked!");
+        move |selection: tree_view::SelectionChanged| {
+            if let Some(sel) = selection.0.as_ref() {
+                let data_borrow = sel.data().borrow();
+                if let Some(data) = &*data_borrow {
+                    if let Some(d) = data.downcast_ref::<String>() {
+                        app.status
+                            .set_status(&format!("Something got clicked!  {:?}", d));
+                    } else {
+                        app.status
+                            .set_status(&format!("Something got clicked!  {:?}", data));
+                    }
+                } else {
+                    app.status
+                        .set_status("Something got clicked!  (node, but no data)");
+                }
+            } else {
+                app.status.set_status("Something got clicked!  (no node)");
+            }
         }
     }));
 
@@ -463,10 +480,11 @@ impl AppState {
 
             WorkerResponse::QueryDone {
                 num_records_scanned,
+                elapsed,
             } => {
                 self.status.set_status(&format!(
-                    "Search is finished. Scanned {} records.",
-                    num_records_scanned
+                    "Search is finished. Scanned {} records in {:?}",
+                    num_records_scanned, elapsed
                 ));
             }
 
