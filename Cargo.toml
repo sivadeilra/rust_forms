@@ -1,6 +1,5 @@
 [workspace] 
 members = [
     "examples/hello",
-    "examples/trace_view",
     "forms",
 ]
