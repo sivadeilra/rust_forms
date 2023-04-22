@@ -1,5 +1,10 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::let_unit_value)]
+#![allow(clippy::single_match)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_else_if)]
 
 mod app;
 mod brush;
@@ -158,9 +163,6 @@ pub fn get_cursor_pos() -> POINT {
     }
 }
 
-type ATOM = u16;
-// use windows::Win32::UI::WindowsAndMessaging::ATOM;
-
 pub(crate) fn get_instance() -> HINSTANCE {
     unsafe {
         let instance = windows::Win32::System::LibraryLoader::GetModuleHandleA(None);
@@ -196,9 +198,9 @@ impl DeferWindowPosOp {
         unsafe {
             let hdwp = BeginDeferWindowPos(n);
             if hdwp == 0 {
-                return Err(Error::Windows(GetLastError()));
+                Err(Error::Windows(GetLastError()))
             } else {
-                return Ok(Self { hdwp });
+                Ok(Self { hdwp })
             }
         }
     }

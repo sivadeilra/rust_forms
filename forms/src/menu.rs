@@ -58,7 +58,7 @@ impl Menu {
         }
     }
 
-    pub fn append_menu<'a>(&mut self, item: MenuItem<'a>) {
+    pub fn append_menu(&mut self, item: MenuItem<'_>) {
         unsafe {
             let mut flags = (if item.enabled {
                 MF_ENABLED
@@ -130,7 +130,7 @@ pub struct SetItem<'a> {
 impl<'a> SetItem<'a> {
     pub(crate) fn get_state(&self) -> u32 {
         unsafe {
-            let state = GetMenuState(
+            GetMenuState(
                 self.menu.hmenu,
                 self.item,
                 if self.by_position {
@@ -138,9 +138,7 @@ impl<'a> SetItem<'a> {
                 } else {
                     MF_BYCOMMAND
                 },
-            );
-            // trace!("get_state: 0x{:x}", state);
-            state
+            )
         }
     }
 

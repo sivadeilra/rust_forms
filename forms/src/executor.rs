@@ -71,6 +71,12 @@ struct Task<F: Future> {
     future: UnsafeCell<F>,
 }
 
+impl Default for AsyncExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AsyncExecutor {
     pub fn new() -> AsyncExecutor {
         unsafe {
@@ -102,7 +108,7 @@ impl AsyncExecutor {
                 0,                                     // y
                 1,                                     // width
                 1,                                     // height
-                Some(HWND_MESSAGE as isize),
+                Some(HWND_MESSAGE),
                 None,
                 instance,
                 null(), // state_ptr.as_ptr() as *mut c_void,
@@ -346,7 +352,7 @@ impl<F: Future<Output = ()>> TaskTrait for Task<F> {
                 &WAKER_VTABLE,
             )));
 
-            let mut cx: Context = Context::from_waker(&*waker);
+            let mut cx: Context = Context::from_waker(&waker);
             Pin::new_unchecked(&mut *self.future.get()).poll(&mut cx)
         }
     }
@@ -356,7 +362,7 @@ static REGISTER_CLASS_ONCE: Once = Once::new();
 static mut EXECUTOR_CLASS_ATOM: ATOM = 0;
 
 const EXECUTOR_CLASS_NAME: &str = "RustForms_AsyncExecutor";
-const EXECUTOR_WM_POLL: u32 = WM_USER + 0;
+const EXECUTOR_WM_POLL: u32 = WM_USER;
 
 fn register_class_lazy() -> ATOM {
     REGISTER_CLASS_ONCE.call_once(|| unsafe {

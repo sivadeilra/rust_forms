@@ -29,7 +29,7 @@ impl ControlState {
         Self {
             hwnd,
             stuck: StuckToThread::new(),
-            form: Rc::downgrade(&form),
+            form: Rc::downgrade(form),
         }
     }
 
@@ -97,12 +97,12 @@ impl ControlState {
     pub fn client_to_screen(&self, client_point: POINT) -> POINT {
         self.check_thread();
         unsafe {
-            let mut result: POINT = client_point.clone();
+            let mut result: POINT = client_point;
             if ClientToScreen(self.handle(), &mut result).into() {
                 result
             } else {
                 // Wrong, but whatevs.
-                return client_point;
+                client_point
             }
         }
     }

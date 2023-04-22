@@ -44,7 +44,7 @@ impl Edit {
                 style |= ES_NOHIDESEL as u32;
             }
             if options.vertical_scrollbar {
-                style |= WS_VSCROLL as u32;
+                style |= WS_VSCROLL;
             }
             if options.want_return {
                 style |= ES_WANTRETURN as u32;

@@ -15,7 +15,7 @@ pub struct TreeView {
     items: RefCell<HashMap<HTREEITEM, Rc<NodeState>>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TreeViewOptions {
     pub has_buttons: bool,
     pub has_lines: bool,
@@ -129,7 +129,7 @@ impl TreeView {
         self.set_ex_style_flag(TVS_EX_DOUBLEBUFFER, value);
     }
 
-    pub fn insert_root<'i>(self: &Rc<Self>, item: &str) -> Result<TreeNode> {
+    pub fn insert_root(self: &Rc<Self>, item: &str) -> Result<TreeNode> {
         self.insert_at(TVI_ROOT, item)
     }
 
@@ -259,7 +259,7 @@ impl TreeNode {
 
         let mut items = self.tree.items.borrow_mut();
 
-        remove_items_rec(self.tree.handle(), self.state.hitem, &mut *items);
+        remove_items_rec(self.tree.handle(), self.state.hitem, &mut items);
         assert!(self.state.deleted.get());
 
         // This should delete hitem and all of the items below it.
@@ -353,20 +353,6 @@ impl TreeNode {
     }
 }
 
-impl Default for TreeViewOptions {
-    fn default() -> Self {
-        Self {
-            has_buttons: false,
-            has_lines: false,
-            always_show_selection: false,
-            show_lines_at_root: false,
-            full_row_select: false,
-            single_expand: false,
-            checkboxes: false,
-        }
-    }
-}
-
 // This walks a tree of items and removes them from the `items` HashMap.
 // This DOES NOT delete the items from the actual TreeView.
 fn remove_items_rec(hwnd: HWND, hitem: HTREEITEM, items: &mut HashMap<HTREEITEM, Rc<NodeState>>) {
@@ -425,32 +411,29 @@ impl NotifyHandlerTrait for TreeViewNotifyShim {
                     if let TreeViewHandler::SelectionChanged(h) = h {
                         trace!("calling SelectionChanged event handler");
 
-                        unsafe {
-                            let selected_hitem: HTREEITEM = SendMessageW(
-                                self.tree.handle(),
-                                TVM_GETNEXTITEM,
-                                TVGN_CARET as WPARAM,
-                                0 as LPARAM,
-                            )
-                                as HTREEITEM;
+                        let selected_hitem: HTREEITEM = SendMessageW(
+                            self.tree.handle(),
+                            TVM_GETNEXTITEM,
+                            TVGN_CARET as WPARAM,
+                            0 as LPARAM,
+                        ) as HTREEITEM;
 
-                            let selected_node: Option<TreeNode>;
-                            if selected_hitem != 0 {
-                                let items = self.tree.items.borrow();
-                                if let Some(n) = items.get(&selected_hitem) {
-                                    selected_node = Some(TreeNode {
-                                        tree: Rc::clone(&self.tree),
-                                        state: Rc::clone(n),
-                                    });
-                                } else {
-                                    selected_node = None;
-                                }
+                        let selected_node: Option<TreeNode>;
+                        if selected_hitem != 0 {
+                            let items = self.tree.items.borrow();
+                            if let Some(n) = items.get(&selected_hitem) {
+                                selected_node = Some(TreeNode {
+                                    tree: Rc::clone(&self.tree),
+                                    state: Rc::clone(n),
+                                });
                             } else {
                                 selected_node = None;
                             }
-
-                            (h.handler)(SelectionChanged(selected_node));
+                        } else {
+                            selected_node = None;
                         }
+
+                        (h.handler)(SelectionChanged(selected_node));
                     }
                 });
 

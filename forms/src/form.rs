@@ -260,8 +260,8 @@ impl Form {
                     continue;
                 }
 
-                TranslateMessage(&mut msg);
-                DispatchMessageW(&mut msg);
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
             }
         }
     }

@@ -19,7 +19,7 @@ impl Font {
         Self::builder(font_family, height).build()
     }
 
-    pub fn builder<'a>(face_name: &'a str, height: i32) -> FontBuilder<'a> {
+    pub fn builder(face_name: &str, height: i32) -> FontBuilder<'_> {
         FontBuilder {
             height,
             width: 0,
@@ -68,7 +68,7 @@ impl<'a> FontBuilder<'a> {
                 return Err(Error::Windows(GetLastError()));
             }
 
-            return Ok(Rc::new(Font { hfont }));
+            Ok(Rc::new(Font { hfont }))
         }
     }
 
@@ -94,7 +94,7 @@ pub enum FontQuality {
 }
 
 impl FontQuality {
-    pub(crate) fn to_native(&self) -> u32 {
+    pub(crate) fn to_native(self) -> u32 {
         match self {
             FontQuality::AntiAliased => ANTIALIASED_QUALITY,
             FontQuality::ClearType => CLEARTYPE_QUALITY,

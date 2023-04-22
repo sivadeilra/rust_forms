@@ -27,6 +27,12 @@ struct SharedState {
     hwnd: HWND,
 }
 
+impl Default for Messenger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Messenger {
     pub fn new() -> Messenger {
         unsafe {
@@ -43,7 +49,7 @@ impl Messenger {
                 0,                                     // y
                 1,                                     // width
                 1,                                     // height
-                Some(HWND_MESSAGE as isize),
+                Some(HWND_MESSAGE),
                 None,
                 instance,
                 null(),
@@ -254,7 +260,7 @@ impl Messenger {
             // Unsafely read the worker from the context object, and then
             // execute it. Then unsafely write its output to context.output.
             let worker: Worker = context.worker.as_ptr().read();
-            let output = catch_unwind(AssertUnwindSafe(move || worker()));
+            let output = catch_unwind(AssertUnwindSafe(worker));
 
             let shared_state = Arc::clone(&context.shared_state);
 
@@ -439,7 +445,7 @@ impl Messenger {
 
         // Create the UI-side state.
         let queue_receiver = Rc::new(ReceiverUIState::<M> {
-            handler: handler,
+            handler,
             queue: Arc::clone(&queue),
             debug_description: debug_description.to_string(),
         });

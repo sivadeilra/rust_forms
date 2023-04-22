@@ -19,8 +19,8 @@ pub fn event_loop() {
                 break;
             }
 
-            TranslateMessage(&mut msg);
-            DispatchMessageW(&mut msg);
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
     }
 }

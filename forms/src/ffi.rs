@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![allow(clippy::upper_case_acronyms)]
 
 //====== WM_NOTIFY codes (NMHDR.code values) ==================================
 
@@ -41,3 +42,7 @@ pub const TVN_FIRST: i32 = -400;
 pub const TVN_SELCHANGEDW: i32 = TVN_FIRST - 51;
 pub const TVN_ITEMCHANGINGW: i32 = TVN_FIRST - 17;
 pub const TVN_SELCHANGINGW: i32 = TVN_FIRST - 50;
+
+pub type ATOM = u16;
+// use windows::Win32::UI::WindowsAndMessaging::ATOM;
+

@@ -1,9 +1,7 @@
-use forms2::*;
+use forms::*;
 
 fn main() {
     env_logger::init();
-
-    let app = App::new();
 
     let f = Form::builder()
         .size(800, 600)
@@ -14,8 +12,8 @@ fn main() {
     let lv = ListView::new(&f);
 
     lv.set_view(Mode::Details);
-    lv.add_column(0, "Stuff");
-    lv.add_column(1, "More stuff");
+    lv.add_column(0, 20, "Stuff");
+    lv.add_column(1, 80, "More stuff");
 
     let start = Button::new(&f);
     start.set_text("Start Your Engine");
@@ -24,7 +22,5 @@ fn main() {
     }));
 
     // f.set_title("Hello, world");
-    f.show_window();
-
-    app.run();
+    f.show_modal();
 }

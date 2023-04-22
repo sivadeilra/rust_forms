@@ -416,7 +416,7 @@ pub enum Mode {
 }
 
 impl Mode {
-    fn to_native(&self) -> u32 {
+    fn to_native(self) -> u32 {
         match self {
             Mode::Details => LV_VIEW_DETAILS,
             Mode::Icon => LV_VIEW_ICON,
