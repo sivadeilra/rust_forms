@@ -61,13 +61,14 @@ use widestring::U16CStr as WCStr;
 use widestring::U16CString as WCString;
 use widestring::U16CString;
 use widestring::U16Str as WStr;
+use windows::core::{PCWSTR, PWSTR};
 use windows::Win32;
-use windows::Win32::Foundation::{HWND, PWSTR, *};
+use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
-use windows::Win32::System::Threading::*;
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Controls::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
-use windows::Win32::UI::WindowsAndMessaging::*;
+use windows::Win32::UI::WindowsAndMessaging::{HDWP, *};
 
 // TODO: We currently leak these types. Fix that.
 pub use windows::Win32::Foundation::POINT;
@@ -99,13 +100,13 @@ pub struct ControlHost {}
 pub(crate) fn set_window_text(hwnd: HWND, text: &str) {
     unsafe {
         let ws = WCString::from_str_truncate(text);
-        SendMessageW(hwnd, WM_SETTEXT, 0, ws.as_ptr() as LPARAM);
+        SendMessageW(hwnd, WM_SETTEXT, WPARAM(0), LPARAM(ws.as_ptr() as isize));
     }
 }
 
 pub(crate) fn get_window_text(hwnd: HWND) -> String {
     unsafe {
-        let len_lresult = SendMessageW(hwnd, WM_GETTEXTLENGTH, 0, 0);
+        let len_lresult = SendMessageW(hwnd, WM_GETTEXTLENGTH, WPARAM(0), LPARAM(0)).0;
         assert!(len_lresult >= 0, "WM_GETTEXTLENGTH returned bogus value");
         let len = len_lresult as usize;
         let capacity = len + 1;
@@ -113,9 +114,10 @@ pub(crate) fn get_window_text(hwnd: HWND) -> String {
         let len_copied = SendMessageW(
             hwnd,
             WM_GETTEXT,
-            capacity as WPARAM,
-            buffer.as_mut_ptr() as LPARAM,
-        );
+            WPARAM(capacity),
+            LPARAM(buffer.as_mut_ptr() as isize),
+        )
+        .0;
         assert!(len_copied >= 0);
         assert!((len_copied as usize) <= len);
         buffer.set_len(len_copied as usize);
@@ -134,7 +136,9 @@ fn init_common_controls() {
         let icc_result = InitCommonControlsEx(&icc).ok();
         debug!("icc_result: {:?}", icc_result);
 
-        SetThemeAppProperties(STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT);
+        SetThemeAppProperties(SET_THEME_APP_PROPERTIES_FLAGS(
+            STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT,
+        ));
     });
 }
 
@@ -163,12 +167,8 @@ pub fn get_cursor_pos() -> POINT {
     }
 }
 
-pub(crate) fn get_instance() -> HINSTANCE {
-    unsafe {
-        let instance = windows::Win32::System::LibraryLoader::GetModuleHandleA(None);
-        debug_assert!(instance != 0);
-        instance
-    }
+pub(crate) fn get_instance() -> HMODULE {
+    unsafe { windows::Win32::System::LibraryLoader::GetModuleHandleA(None).unwrap() }
 }
 
 pub fn with<T, F: FnMut(&mut T)>(mut value: T, mut f: F) -> T {
@@ -196,12 +196,8 @@ pub(crate) struct DeferWindowPosOp {
 impl DeferWindowPosOp {
     pub fn begin(n: i32) -> Result<Self> {
         unsafe {
-            let hdwp = BeginDeferWindowPos(n);
-            if hdwp == 0 {
-                Err(Error::Windows(GetLastError()))
-            } else {
-                Ok(Self { hdwp })
-            }
+            let hdwp = BeginDeferWindowPos(n).unwrap();
+            Ok(Self { hdwp })
         }
     }
 
@@ -213,10 +209,11 @@ impl DeferWindowPosOp {
         y: i32,
         cx: i32,
         cy: i32,
-        flags: u32,
+        flags: SET_WINDOW_POS_FLAGS,
     ) {
         unsafe {
-            self.hdwp = DeferWindowPos(self.hdwp, hwnd, hwnd_insert_after, x, y, cx, cy, flags);
+            self.hdwp =
+                DeferWindowPos(self.hdwp, hwnd, hwnd_insert_after, x, y, cx, cy, flags).unwrap();
         }
     }
 }

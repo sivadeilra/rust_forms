@@ -15,8 +15,8 @@ impl Brush {
 
     pub fn from_color_ref(color: ColorRef) -> Result<Brush> {
         unsafe {
-            let hbrush = CreateSolidBrush(color.as_u32());
-            if hbrush != 0 {
+            let hbrush = CreateSolidBrush(COLORREF::from(color));
+            if hbrush.0 != 0 {
                 Ok(Brush::Owned(OwnedBrush { hbrush }))
             } else {
                 Err(Error::Windows(GetLastError()))
@@ -40,8 +40,8 @@ pub struct SystemBrush(HBRUSH);
 impl SystemBrush {
     pub fn from_sys_color(color: SysColor) -> Result<SystemBrush> {
         unsafe {
-            let hbrush = GetSysColorBrush(color as i32);
-            if hbrush != 0 {
+            let hbrush = GetSysColorBrush(SYS_COLOR_INDEX(color as i32));
+            if hbrush.0 != 0 {
                 Ok(SystemBrush(hbrush))
             } else {
                 Err(Error::Windows(ERROR_NOT_SUPPORTED))

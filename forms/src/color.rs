@@ -29,7 +29,13 @@ impl ColorRef {
     }
 
     pub fn from_sys_color(c: SysColor) -> Self {
-        unsafe { Self(GetSysColor(c as u32)) }
+        unsafe { Self(GetSysColor(SYS_COLOR_INDEX(c as i32))) }
+    }
+}
+
+impl From<ColorRef> for COLORREF {
+    fn from(c: ColorRef) -> COLORREF {
+        COLORREF(c.as_u32())
     }
 }
 

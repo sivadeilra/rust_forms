@@ -35,60 +35,54 @@ impl ControlState {
 
     pub fn set_tab_stop(&self, value: bool) {
         self.check_thread();
-        self.set_window_style_bits(WS_TABSTOP, if value { WS_TABSTOP } else { 0 })
+        self.set_window_style_bits(WS_TABSTOP, if value { WS_TABSTOP } else { WINDOW_STYLE(0) })
     }
 
-    pub(crate) fn get_window_style(&self) -> u32 {
-        unsafe { GetWindowLongW(self.hwnd, GWL_STYLE) as u32 }
+    pub(crate) fn get_window_style(&self) -> WINDOW_STYLE {
+        unsafe { WINDOW_STYLE(GetWindowLongW(self.hwnd, GWL_STYLE) as u32) }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn get_window_style_ex(&self) -> u32 {
+    pub(crate) fn get_window_style_ex(&self) -> WINDOW_EX_STYLE {
         self.check_thread();
-        unsafe {
-            let value = GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32;
-            trace!("get window style ex: 0x{:x}", value);
-            value
-        }
+        unsafe { WINDOW_EX_STYLE(GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32) }
     }
 
-    pub(crate) fn set_window_style(&self, style: u32) {
+    pub(crate) fn set_window_style(&self, style: WINDOW_STYLE) {
         self.check_thread();
         unsafe {
-            trace!("setting window style: 0x{:x}", style);
-            SetWindowLongW(self.hwnd, GWL_STYLE, style as _);
+            SetWindowLongW(self.hwnd, GWL_STYLE, style.0 as i32);
         }
     }
 
     #[allow(dead_code)]
-    pub(crate) fn set_window_style_ex(&self, style: u32) {
+    pub(crate) fn set_window_style_ex(&self, style: WINDOW_EX_STYLE) {
         self.check_thread();
         unsafe {
-            trace!("set window style ex: 0x{:x}", style);
-            SetWindowLongW(self.hwnd, GWL_EXSTYLE, style as _);
+            SetWindowLongW(self.hwnd, GWL_EXSTYLE, style.0 as i32);
         }
     }
 
-    pub(crate) fn set_window_style_bits(&self, mask: u32, value: u32) {
+    pub(crate) fn set_window_style_bits(&self, mask: WINDOW_STYLE, value: WINDOW_STYLE) {
         self.check_thread();
-        assert!(value & !mask == 0);
+        assert!(value.0 & !mask.0 == 0);
         let style = self.get_window_style();
-        let new_style = (style & !mask) | value;
-        self.set_window_style(new_style);
+        let new_style = (style.0 & !mask.0) | value.0;
+        self.set_window_style(WINDOW_STYLE(new_style));
     }
 
     #[allow(dead_code)]
-    pub(crate) fn set_window_style_ex_bits(&self, mask: u32, value: u32) {
+    pub(crate) fn set_window_style_ex_bits(&self, mask: WINDOW_EX_STYLE, value: WINDOW_EX_STYLE) {
         self.check_thread();
-        assert!(value & !mask == 0);
+        assert!(value.0 & !mask.0 == 0);
         let style = self.get_window_style_ex();
-        let new_style = (style & !mask) | value;
-        self.set_window_style_ex(new_style);
+        let new_style = (style.0 & !mask.0) | value.0;
+        self.set_window_style_ex(WINDOW_EX_STYLE(new_style));
     }
 
-    pub(crate) fn set_window_style_flag(&self, mask: u32, value: bool) {
+    pub(crate) fn set_window_style_flag(&self, mask: WINDOW_STYLE, value: bool) {
         self.check_thread();
-        self.set_window_style_bits(mask, if value { mask } else { 0 });
+        self.set_window_style_bits(mask, if value { mask } else { WINDOW_STYLE(0) });
     }
 
     /// Converts a client-area coordinate of a specified point to screen coordinates.
@@ -112,12 +106,12 @@ impl ControlState {
         unsafe {
             SetWindowPos(
                 self.hwnd,
-                0, // insert after
+                HWND(0), // insert after
                 rect.left,
                 rect.top,
                 rect.right - rect.left,
                 rect.bottom - rect.top,
-                0,
+                SET_WINDOW_POS_FLAGS(0),
             );
         }
     }

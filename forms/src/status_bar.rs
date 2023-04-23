@@ -23,8 +23,15 @@ impl StatusBar {
             let class_name_wstr = WCString::from_str_truncate(STATUSCLASSNAME);
             let ex_style = 0;
 
-            let hwnd = CreateStatusWindowW((WS_CHILD | WS_VISIBLE) as i32, "", form.handle(), 0);
-            if hwnd == 0 {
+            let text = U16CString::from_str_truncate("");
+
+            let hwnd = CreateStatusWindowW(
+                (WS_CHILD | WS_VISIBLE).0 as i32,
+                PCWSTR::from_raw(text.as_ptr()),
+                form.handle(),
+                0,
+            );
+            if hwnd.0 == 0 {
                 panic!("failed to create StatusBar");
             }
 

@@ -7,7 +7,7 @@ pub struct Menu {
 impl Drop for Menu {
     fn drop(&mut self) {
         unsafe {
-            if self.hmenu != 0 {
+            if self.hmenu.0 != 0 {
                 // debug!("destroying HMENU 0x{:x}", self.hmenu);
                 DestroyMenu(self.hmenu);
             } else {
@@ -20,37 +20,28 @@ impl Drop for Menu {
 impl Menu {
     pub(crate) fn extract(mut self) -> HMENU {
         let hmenu = self.hmenu;
-        self.hmenu = 0;
+        self.hmenu = HMENU(0);
         hmenu
     }
 
     pub fn create_menu() -> Self {
         unsafe {
-            let hmenu = CreateMenu();
-            if hmenu == 0 {
-                panic!("CreatePopupMenu failed");
-            }
-            // debug!("CreateMenu 0x{:x}", hmenu);
+            let hmenu = CreateMenu().unwrap();
             Self { hmenu }
         }
     }
 
     pub fn create_popup_menu() -> Self {
         unsafe {
-            let hmenu = CreatePopupMenu();
-            if hmenu == 0 {
-                panic!("CreatePopupMenu failed");
-            }
-            // debug!("CreatePopupMenu 0x{:x}", hmenu);
+            let hmenu = CreatePopupMenu().unwrap();
             Self { hmenu }
         }
     }
 
     pub fn track_popup_menu(&self, form: &Form, x: i32, y: i32) {
         unsafe {
-            let flags = 0;
-
-            if TrackPopupMenu(self.hmenu, flags, x, y, 0, form.handle.get(), null()).into() {
+            let flags = TRACK_POPUP_MENU_FLAGS(0);
+            if TrackPopupMenu(self.hmenu, flags, x, y, 0, form.handle.get(), None).into() {
                 debug!("TrackPopupMenu succeeded");
             } else {
                 // debug!("TrackPopupMenu failed");
@@ -64,10 +55,23 @@ impl Menu {
                 MF_ENABLED
             } else {
                 MF_DISABLED
-            }) | (if item.grayed { MF_GRAYED } else { 0 })
-                | (if item.separator { MF_SEPARATOR } else { 0 })
-                | (if item.checked { MF_CHECKED } else { 0 })
-                | (if item.string.is_some() { MF_STRING } else { 0 });
+            }) | (if item.grayed {
+                MF_GRAYED
+            } else {
+                MENU_ITEM_FLAGS(0)
+            }) | (if item.separator {
+                MF_SEPARATOR
+            } else {
+                MENU_ITEM_FLAGS(0)
+            }) | (if item.checked {
+                MF_CHECKED
+            } else {
+                MENU_ITEM_FLAGS(0)
+            }) | (if item.string.is_some() {
+                MF_STRING
+            } else {
+                MENU_ITEM_FLAGS(0)
+            });
 
             let wstring: WCString;
             let wstring_ptr: *const u16;
@@ -82,23 +86,12 @@ impl Menu {
             let id: usize;
             if let Some(submenu) = item.submenu {
                 flags |= MF_POPUP;
-                id = submenu.extract() as usize;
+                id = submenu.extract().0 as usize;
             } else {
                 id = item.id;
             }
 
-            trace!(
-                "AppendMenuW: hmenu 0x{:x}, flags 0x{:x}, id {}, text {:?}",
-                self.hmenu,
-                flags,
-                id,
-                item.string
-            );
-            if AppendMenuW(self.hmenu, flags, id, PWSTR(wstring_ptr as *mut _)).into() {
-                // trace!("appended menu item");
-            } else {
-                warn!("failed to append a menu item");
-            }
+            AppendMenuW(self.hmenu, flags, id, PCWSTR::from_raw(wstring_ptr)).unwrap();
         }
     }
 
@@ -128,9 +121,9 @@ pub struct SetItem<'a> {
 }
 
 impl<'a> SetItem<'a> {
-    pub(crate) fn get_state(&self) -> u32 {
+    pub(crate) fn get_state(&self) -> MENU_ITEM_STATE {
         unsafe {
-            GetMenuState(
+            MENU_ITEM_STATE(GetMenuState(
                 self.menu.hmenu,
                 self.item,
                 if self.by_position {
@@ -138,11 +131,11 @@ impl<'a> SetItem<'a> {
                 } else {
                     MF_BYCOMMAND
                 },
-            )
+            ))
         }
     }
 
-    pub(crate) fn set_state(&self, new_state: u32) {
+    pub(crate) fn set_state(&self, new_state: MENU_ITEM_STATE) {
         unsafe {
             let mut item: MENUITEMINFOW = zeroed();
             item.cbSize = size_of::<MENUITEMINFOW>() as u32;
@@ -158,12 +151,12 @@ impl<'a> SetItem<'a> {
                 // let readback_state = self.get_state();
                 // trace!("readback state: 0x{:x}", readback_state);
             } else {
-                warn!("SetMenuItemInfoW failed: {}", GetLastError());
+                warn!("SetMenuItemInfoW failed: {:?}", GetLastError());
             }
         }
     }
 
-    fn set_state_bits(&self, mask: u32, value: u32) {
+    fn set_state_bits(&self, mask: MENU_ITEM_STATE, value: MENU_ITEM_STATE) {
         let old_state = self.get_state();
         let new_state = (old_state & !mask) | value;
         // trace!("set_state_bits: old_state 0x{:x} new_state 0x{:x}", old_state, new_state);
@@ -171,15 +164,22 @@ impl<'a> SetItem<'a> {
     }
 
     pub fn checked(&self) -> bool {
-        (self.get_state() & MFS_CHECKED) != 0
+        (self.get_state() & MFS_CHECKED).0 != 0
     }
 
     pub fn set_checked(&self, value: bool) {
-        self.set_state_bits(MFS_CHECKED, if value { MFS_CHECKED } else { 0 });
+        self.set_state_bits(
+            MFS_CHECKED,
+            if value {
+                MFS_CHECKED
+            } else {
+                MENU_ITEM_STATE(0)
+            },
+        );
     }
 
     pub fn enabled(&self) -> bool {
-        (self.get_state() & MFS_DISABLED) == 0
+        (self.get_state() & MFS_DISABLED).0 == 0
     }
 
     pub fn set_enabled(&self, value: bool) {

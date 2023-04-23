@@ -12,7 +12,8 @@ pub struct TreeView {
     control: ControlState,
     handlers: RefCell<Vec<Rc<TreeViewHandler>>>,
 
-    items: RefCell<HashMap<HTREEITEM, Rc<NodeState>>>,
+    // key is HTREEITEM
+    items: RefCell<HashMap<isize, Rc<NodeState>>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -31,7 +32,7 @@ const WC_TREEVIEW: &str = "SysTreeView32";
 impl TreeView {
     pub fn set_visible(&self, value: bool) {
         let style = self.control.get_window_style();
-        let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { 0 });
+        let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { WINDOW_STYLE(0) });
         self.control.set_window_style(new_style);
     }
 
@@ -43,43 +44,43 @@ impl TreeView {
 
             let mut style = WS_CHILD | WS_VISIBLE | WS_CHILDWINDOW | WS_BORDER | WS_TABSTOP;
             if options.has_lines {
-                style |= TVS_HASLINES;
+                style |= WINDOW_STYLE(TVS_HASLINES);
             }
             if options.always_show_selection {
-                style |= TVS_SHOWSELALWAYS;
+                style |= WINDOW_STYLE(TVS_SHOWSELALWAYS);
             }
             if options.show_lines_at_root {
-                style |= TVS_LINESATROOT;
+                style |= WINDOW_STYLE(TVS_LINESATROOT);
             }
             if options.has_buttons {
-                style |= TVS_HASBUTTONS;
+                style |= WINDOW_STYLE(TVS_HASBUTTONS);
             }
             if options.full_row_select {
-                style |= TVS_FULLROWSELECT;
+                style |= WINDOW_STYLE(TVS_FULLROWSELECT);
             }
             if options.single_expand {
-                style |= TVS_SINGLEEXPAND;
+                style |= WINDOW_STYLE(TVS_SINGLEEXPAND);
             }
             if options.checkboxes {
-                style |= TVS_CHECKBOXES;
+                style |= WINDOW_STYLE(TVS_CHECKBOXES);
             }
 
             let hwnd = CreateWindowExW(
-                ex_style,
-                PWSTR(class_name_wstr.as_ptr() as *mut _),
-                PWSTR(null_mut()),
+                WINDOW_EX_STYLE(ex_style),
+                PCWSTR::from_raw(class_name_wstr.as_ptr() as *mut _),
+                PCWSTR::from_raw(null_mut()),
                 style,
                 0,
                 0,
                 0,
                 0,
                 parent_window,
-                0 as HMENU,
+                HMENU(0),
                 get_instance(),
-                null_mut(),
+                None,
             );
 
-            if hwnd == 0 {
+            if hwnd.0 == 0 {
                 panic!("failed to create TreeView window");
             }
 
@@ -93,7 +94,7 @@ impl TreeView {
             let mut notify_handlers = form.notify_handlers.borrow_mut();
             let state_rc: Rc<TreeView> = Rc::clone(&state);
             notify_handlers.insert(
-                state.handle(),
+                state.handle().0,
                 NotifyHandler {
                     handler: Rc::new(TreeViewNotifyShim { tree: state_rc }),
                 },
@@ -106,7 +107,15 @@ impl TreeView {
 
     #[allow(dead_code)]
     fn get_ex_style(&self) -> u32 {
-        unsafe { SendMessageW(self.control.handle(), TVM_GETEXTENDEDSTYLE, 0, 0) as u32 }
+        unsafe {
+            SendMessageW(
+                self.control.handle(),
+                TVM_GETEXTENDEDSTYLE,
+                WPARAM(0),
+                LPARAM(0),
+            )
+            .0 as u32
+        }
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/tvm-setextendedstyle
@@ -115,8 +124,8 @@ impl TreeView {
             SendMessageW(
                 self.control.handle(),
                 TVM_SETEXTENDEDSTYLE,
-                mask as WPARAM,
-                values as LPARAM,
+                WPARAM(mask as usize),
+                LPARAM(values as isize),
             );
         }
     }
@@ -146,13 +155,16 @@ impl TreeView {
             let text_wstr = WCString::from_str(text).unwrap();
             itemex.pszText = PWSTR(text_wstr.as_ptr() as *const _ as *mut _);
 
-            let hitem = SendMessageW(
-                self.handle(),
-                TVM_INSERTITEM,
-                0,
-                &item as *const _ as LPARAM,
+            let hitem = HTREEITEM(
+                SendMessageW(
+                    self.handle(),
+                    TVM_INSERTITEM,
+                    WPARAM(0),
+                    LPARAM(&item as *const _ as isize),
+                )
+                .0,
             );
-            if hitem == 0 {
+            if hitem.0 == 0 {
                 return Err(Error::Windows(GetLastError()));
             }
 
@@ -164,7 +176,7 @@ impl TreeView {
 
             {
                 let mut items = self.items.borrow_mut();
-                items.insert(hitem, Rc::clone(&state));
+                items.insert(hitem.0, Rc::clone(&state));
             }
 
             Ok(TreeNode {
@@ -209,7 +221,7 @@ pub struct TreeNode {
 }
 
 struct NodeState {
-    hitem: isize, // native pointer to tree view node
+    hitem: HTREEITEM, // native pointer to tree view node
     deleted: Cell<bool>,
     data: RefCell<Option<Box<dyn Any>>>,
 }
@@ -269,8 +281,8 @@ impl TreeNode {
             SendMessageW(
                 self.tree.handle(),
                 TVM_DELETEITEM,
-                0,
-                self.state.hitem as LPARAM,
+                WPARAM(0),
+                LPARAM(self.state.hitem.0),
             );
         }
     }
@@ -285,8 +297,8 @@ impl TreeNode {
             SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                TVE_EXPAND as WPARAM,
-                self.state.hitem,
+                WPARAM(TVE_EXPAND.0 as usize),
+                LPARAM(self.state.hitem.0),
             );
         }
     }
@@ -300,8 +312,8 @@ impl TreeNode {
             SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                TVE_COLLAPSE as WPARAM,
-                self.state.hitem,
+                WPARAM(TVE_COLLAPSE.0 as usize),
+                LPARAM(self.state.hitem.0),
             );
         }
     }
@@ -315,8 +327,8 @@ impl TreeNode {
             SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                TVE_TOGGLE as WPARAM,
-                self.state.hitem,
+                WPARAM(TVE_TOGGLE.0 as usize),
+                LPARAM(self.state.hitem.0),
             );
         }
     }
@@ -330,8 +342,8 @@ impl TreeNode {
             SendMessageW(
                 self.tree.handle(),
                 TVM_ENSUREVISIBLE,
-                0,
-                self.state.hitem as LPARAM,
+                WPARAM(0),
+                LPARAM(self.state.hitem.0),
             );
         }
     }
@@ -345,31 +357,48 @@ impl TreeNode {
             let state = SendMessageW(
                 self.tree.handle(),
                 TVM_GETITEMSTATE,
-                self.state.hitem as WPARAM,
-                TVIF_STATEEX as LPARAM,
+                WPARAM(self.state.hitem.0 as usize),
+                LPARAM(TVIF_STATEEX.0 as isize),
             );
-            (state as u32 & TVIS_SELECTED) != 0
+            (state.0 as u32 & TVIS_SELECTED.0) != 0
         }
     }
 }
 
 // This walks a tree of items and removes them from the `items` HashMap.
 // This DOES NOT delete the items from the actual TreeView.
-fn remove_items_rec(hwnd: HWND, hitem: HTREEITEM, items: &mut HashMap<HTREEITEM, Rc<NodeState>>) {
+fn remove_items_rec(
+    hwnd: HWND,
+    hitem: HTREEITEM,
+    items: &mut HashMap</*HTREEITEM*/ isize, Rc<NodeState>>,
+) {
     unsafe {
-        let first_child =
-            SendMessageW(hwnd, TVM_GETNEXTITEM, TVGN_CHILD as WPARAM, hitem as LPARAM) as HTREEITEM;
+        let first_child = HTREEITEM(
+            SendMessageW(
+                hwnd,
+                TVM_GETNEXTITEM,
+                WPARAM(TVGN_CHILD as usize),
+                LPARAM(hitem.0),
+            )
+            .0,
+        );
         let mut current_child = first_child;
-        while current_child != 0 {
+        while current_child.0 != 0 {
             remove_items_rec(hwnd, current_child, items);
-            let next_child =
-                SendMessageW(hwnd, TVM_GETNEXTITEM, TVGN_NEXT as WPARAM, current_child);
+            let next_child = HTREEITEM(
+                SendMessageW(
+                    hwnd,
+                    TVM_GETNEXTITEM,
+                    WPARAM(TVGN_NEXT as usize),
+                    LPARAM(current_child.0),
+                )
+                .0,
+            );
             current_child = next_child;
         }
     }
 
-    if let Some(removed_item) = items.remove(&hitem) {
-        trace!("marking htreeitem 0x{:x} as deleted", hitem);
+    if let Some(removed_item) = items.remove(&hitem.0) {
         assert!(!removed_item.deleted.get());
         removed_item.deleted.set(true);
     }
@@ -411,17 +440,20 @@ impl NotifyHandlerTrait for TreeViewNotifyShim {
                     if let TreeViewHandler::SelectionChanged(h) = h {
                         trace!("calling SelectionChanged event handler");
 
-                        let selected_hitem: HTREEITEM = SendMessageW(
-                            self.tree.handle(),
-                            TVM_GETNEXTITEM,
-                            TVGN_CARET as WPARAM,
-                            0 as LPARAM,
-                        ) as HTREEITEM;
+                        let selected_hitem = HTREEITEM(
+                            SendMessageW(
+                                self.tree.handle(),
+                                TVM_GETNEXTITEM,
+                                WPARAM(TVGN_CARET as usize),
+                                LPARAM(0),
+                            )
+                            .0,
+                        );
 
                         let selected_node: Option<TreeNode>;
-                        if selected_hitem != 0 {
+                        if selected_hitem.0 != 0 {
                             let items = self.tree.items.borrow();
-                            if let Some(n) = items.get(&selected_hitem) {
+                            if let Some(n) = items.get(&selected_hitem.0) {
                                 selected_node = Some(TreeNode {
                                     tree: Rc::clone(&self.tree),
                                     state: Rc::clone(n),

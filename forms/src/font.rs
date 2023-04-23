@@ -60,10 +60,10 @@ impl<'a> FontBuilder<'a> {
                 0,                        // clipprecision,
                 self.quality.to_native(), // quality,
                 0,                        // pitchandfamily,
-                PWSTR(face_name.as_ptr() as *mut _),
+                PCWSTR::from_raw(face_name.as_ptr()),
             );
 
-            if hfont == 0 {
+            if hfont.0 == 0 {
                 trace!("failed to create font");
                 return Err(Error::Windows(GetLastError()));
             }
@@ -103,5 +103,6 @@ impl FontQuality {
             FontQuality::NonAntiAliased => NONANTIALIASED_QUALITY,
             FontQuality::Proof => PROOF_QUALITY,
         }
+        .0 as u32
     }
 }

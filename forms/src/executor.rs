@@ -100,20 +100,20 @@ impl AsyncExecutor {
             let instance = get_instance();
             let window_name: [u16; 2] = [0; 2];
             let hwnd = CreateWindowExW(
-                0,
-                PWSTR(window_class_atom as usize as *mut u16),
-                PWSTR(window_name.as_ptr() as *mut _), // window name
-                0,                                     // style
-                0,                                     // x
-                0,                                     // y
-                1,                                     // width
-                1,                                     // height
-                Some(HWND_MESSAGE),
+                WINDOW_EX_STYLE(0),
+                PCWSTR::from_raw(window_class_atom as usize as *const u16),
+                PCWSTR::from_raw(window_name.as_ptr()), // window name
+                WINDOW_STYLE(0),                        // style
+                0,                                      // x
+                0,                                      // y
+                1,                                      // width
+                1,                                      // height
+                HWND_MESSAGE,
                 None,
                 instance,
-                null(), // state_ptr.as_ptr() as *mut c_void,
+                None, // state_ptr.as_ptr() as *mut c_void,
             );
-            if hwnd == 0 {
+            if hwnd.0 == 0 {
                 panic!("Failed to create messaging window for AsyncExecutor");
             }
 
@@ -129,7 +129,7 @@ impl AsyncExecutor {
             });
             let state_ptr: *const ExecutorState = &*state;
 
-            SetWindowLongPtrW(hwnd, 0, state_ptr as LPARAM);
+            SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), state_ptr as isize);
 
             // The alloc and window were successfully created.
             // Return a strong reference to the executor.
@@ -195,11 +195,11 @@ impl ExecutorState {
 
     fn schedule_always(&self) {
         unsafe {
-            if PostMessageW(self.hwnd, EXECUTOR_WM_POLL, 0, 0).into() {
+            if PostMessageW(self.hwnd, EXECUTOR_WM_POLL, WPARAM(0), LPARAM(0)).into() {
                 trace!("posted EXECUTOR_WM_POLL");
             } else {
                 // PostMessage failed. Untrack the post_is_posted state.
-                warn!("PostMessageW failed: {}", GetLastError());
+                warn!("PostMessageW failed: {}", GetLastError().0);
                 // state.as_mut().poll_is_posted = false;
             }
         }
@@ -373,11 +373,11 @@ fn register_class_lazy() -> ATOM {
         let mut class_ex: WNDCLASSEXW = zeroed();
         class_ex.cbSize = size_of::<WNDCLASSEXW>() as u32;
         class_ex.hInstance = instance;
-        class_ex.lpszClassName = PWSTR(class_name_wstr.as_mut_ptr());
-        class_ex.style = 0;
-        class_ex.hbrBackground = 0;
+        class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
+        class_ex.style = WNDCLASS_STYLES(0);
+        class_ex.hbrBackground = HBRUSH(0);
         class_ex.lpfnWndProc = Some(executor_wndproc);
-        class_ex.hCursor = 0;
+        class_ex.hCursor = HCURSOR(0);
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -400,13 +400,13 @@ extern "system" fn executor_wndproc(
         match message {
             WM_CREATE => {
                 trace!("executor_wndproc: WM_CREATE");
-                return 1;
+                return LRESULT(1);
             }
 
             _ => {}
         }
 
-        let state_ptr: isize = GetWindowLongPtrW(window, 0);
+        let state_ptr: isize = GetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0));
         if state_ptr == 0 {
             trace!("executor_wndproc: lparam is null, msg {:04x}", message);
             return DefWindowProcW(window, message, wparam, lparam);
@@ -418,11 +418,11 @@ extern "system" fn executor_wndproc(
             EXECUTOR_WM_POLL => {
                 trace!("received EXECUTOR_WM_POLL");
                 (*state).poll_all();
-                return 0;
+                return LRESULT(0);
             }
 
             WM_DESTROY => {
-                return 0;
+                return LRESULT(0);
             }
 
             _ => {

@@ -3,3 +3,12 @@ members = [
     "examples/hello",
     "forms",
 ]
+
+[workspace.dependencies]
+widestring = "1.0.2"
+log = "0.4.17"
+static_assertions = "1.0"
+windows = "0.48.0"
+windows-sys = "0.48.0"
+tokio = "1.27.0"
+env_logger = "0.10.0"

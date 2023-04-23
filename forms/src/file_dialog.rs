@@ -56,7 +56,7 @@ impl FileDialog {
         unsafe {
             let mut of: OPENFILENAMEW = zeroed();
             of.lStructSize = size_of_val(&of) as u32;
-            of.hwndOwner = parent.map(|f| f.handle()).unwrap_or(0);
+            of.hwndOwner = parent.map(|f| f.handle()).unwrap_or(HWND(0));
 
             // Filename buffer
             let mut filename_buffer: Vec<u16> = vec![0; 32768];
@@ -93,21 +93,21 @@ impl FileDialog {
                     filters_ptr = filters.as_ptr();
                 }
             }
-            of.lpstrFilter = PWSTR(filters_ptr as *mut _);
+            of.lpstrFilter = PCWSTR::from_raw(filters_ptr);
             debug!("filter: {:?}", filters.as_slice());
 
             // Handle title
-            let title: U16CString;
+            let mut title: U16CString;
             if let Some(t) = self.title.as_ref() {
                 title = U16CString::from_str(t).unwrap();
-                of.lpstrFileTitle = PWSTR(title.as_ptr() as *mut _);
+                of.lpstrFileTitle = PWSTR::from_raw(title.as_mut_ptr());
             }
 
             // Handle initial dir
             let initial_dir: U16CString;
             if let Some(s) = self.initial_dir.as_ref() {
                 initial_dir = U16CString::from_str(s).unwrap();
-                of.lpstrInitialDir = PWSTR(initial_dir.as_ptr() as *mut _);
+                of.lpstrInitialDir = PCWSTR::from_raw(initial_dir.as_ptr());
             }
 
             if self.allow_multi_select {

@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use windows::Win32::System::Threading::{QueueUserWorkItem, WORKER_THREAD_FLAGS};
 
 #[derive(Clone)]
 pub struct Messenger {
@@ -41,20 +42,20 @@ impl Messenger {
             let instance = get_instance();
             let window_name: [u16; 2] = [0; 2];
             let hwnd = CreateWindowExW(
-                0,
-                PWSTR(window_class_atom as usize as *mut u16),
-                PWSTR(window_name.as_ptr() as *mut _), // window name
-                0,                                     // style
-                0,                                     // x
-                0,                                     // y
-                1,                                     // width
-                1,                                     // height
-                Some(HWND_MESSAGE),
+                WINDOW_EX_STYLE(0),
+                PCWSTR::from_raw(window_class_atom as usize as *const u16),
+                PCWSTR::from_raw(window_name.as_ptr()), // window name
+                WINDOW_STYLE(0),                        // style
+                0,                                      // x
+                0,                                      // y
+                1,                                      // width
+                1,                                      // height
+                Some(&HWND_MESSAGE),
                 None,
                 instance,
-                null(),
+                None,
             );
-            if hwnd == 0 {
+            if hwnd.0 == 0 {
                 panic!("Failed to create messaging window for Messenger");
             }
 
@@ -68,7 +69,7 @@ impl Messenger {
             });
             let state_ptr: *const MessengerState = &*state;
 
-            SetWindowLongPtrW(hwnd, 0, state_ptr as LPARAM);
+            SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), state_ptr as isize);
 
             // The alloc and window were successfully created.
             // Return a strong reference to the executor.
@@ -89,16 +90,16 @@ fn register_class_lazy() -> ATOM {
     REGISTER_CLASS_ONCE.call_once(|| unsafe {
         let instance = get_instance();
 
-        let mut class_name_wstr = U16CString::from_str(EXECUTOR_CLASS_NAME).unwrap();
+        let class_name_wstr = U16CString::from_str(EXECUTOR_CLASS_NAME).unwrap();
 
         let mut class_ex: WNDCLASSEXW = zeroed();
         class_ex.cbSize = size_of::<WNDCLASSEXW>() as u32;
         class_ex.hInstance = instance;
-        class_ex.lpszClassName = PWSTR(class_name_wstr.as_mut_ptr());
-        class_ex.style = 0;
-        class_ex.hbrBackground = 0;
+        class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_ptr());
+        class_ex.style = WNDCLASS_STYLES(0);
+        class_ex.hbrBackground = HBRUSH(0);
         class_ex.lpfnWndProc = Some(messenger_wndproc);
-        class_ex.hCursor = 0;
+        class_ex.hCursor = HCURSOR(0);
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -120,13 +121,13 @@ extern "system" fn messenger_wndproc(
     unsafe {
         match message {
             WM_CREATE => {
-                return 1;
+                return LRESULT(1);
             }
 
             _ => {}
         }
 
-        let state_ptr: isize = GetWindowLongPtrW(hwnd, 0);
+        let state_ptr: isize = GetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0));
         if state_ptr == 0 {
             return DefWindowProcW(hwnd, message, wparam, lparam);
         }
@@ -141,7 +142,7 @@ extern "system" fn messenger_wndproc(
                 let completion_func = (*header).completion_func;
                 completion_func(header);
                 */
-                return 0;
+                return LRESULT(0);
             }
 
             MESSENGER_WM_POLL_PIPE_RECEIVERS => {
@@ -179,7 +180,7 @@ extern "system" fn messenger_wndproc(
                     }
                 }
 
-                return 0;
+                return LRESULT(0);
             }
 
             _ => {}
@@ -280,7 +281,7 @@ impl Messenger {
                 // detected. Still, it would be great if we could find a way
                 // to avoid this race condition.
                 if need_wake {
-                    PostMessageW(hwnd, MESSENGER_WM_POLL_PIPE_RECEIVERS, 0, 0);
+                    PostMessageW(hwnd, MESSENGER_WM_POLL_PIPE_RECEIVERS, WPARAM(0), LPARAM(0));
                 }
             } else {
                 // This is a pretty bad outcome. It means that another thread
@@ -312,8 +313,8 @@ impl Messenger {
 
             if QueueUserWorkItem(
                 Some(thread_routine::<Worker, WorkOutput, Finisher>),
-                context_ptr as *mut c_void,
-                0,
+                Some(context_ptr as *mut c_void),
+                WORKER_THREAD_FLAGS(0),
             )
             .into()
             {
@@ -514,7 +515,12 @@ impl<M> Sender<M> {
 
         if was_empty {
             unsafe {
-                PostMessageW(self.queue.hwnd, MESSENGER_WM_POLL_PIPE_RECEIVERS, 0, 0);
+                PostMessageW(
+                    self.queue.hwnd,
+                    MESSENGER_WM_POLL_PIPE_RECEIVERS,
+                    WPARAM(0),
+                    LPARAM(0),
+                );
             }
         }
     }

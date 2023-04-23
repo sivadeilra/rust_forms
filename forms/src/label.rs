@@ -18,24 +18,24 @@ impl Label {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("STATIC");
-            let ex_style = 0;
+            let ex_style = WINDOW_EX_STYLE(0);
 
             let hwnd = CreateWindowExW(
                 ex_style,
-                PWSTR(class_name_wstr.as_ptr() as *mut _),
-                PWSTR(window_name.as_ptr() as *mut _),
+                PCWSTR::from_raw(class_name_wstr.as_ptr()),
+                PCWSTR::from_raw(window_name.as_ptr()),
                 WS_CHILD | WS_VISIBLE,
                 0,
                 0,
                 0,
                 0,
                 parent_window,
-                0 as HMENU,     // hmenu,
+                HMENU(0),       // hmenu,
                 get_instance(), // hinstance,
-                null_mut(),
+                None,
             );
 
-            if hwnd == 0 {
+            if hwnd.0 == 0 {
                 panic!("failed to create control window");
             }
 

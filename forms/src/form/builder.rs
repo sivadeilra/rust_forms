@@ -50,7 +50,7 @@ impl<'a> FormBuilder<'a> {
         init_common_controls();
 
         unsafe {
-            let co_initialized = match CoInitializeEx(null_mut(), COINIT_APARTMENTTHREADED) {
+            let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
                 Ok(()) => {
                     debug!("CoInitializeEx succeeded");
                     true
@@ -64,13 +64,13 @@ impl<'a> FormBuilder<'a> {
             let window_class_atom = register_class_lazy();
             let instance = get_instance();
 
-            let ex_style: u32 = 0;
+            let ex_style = WINDOW_EX_STYLE(0);
 
-            let mut window_name_wstr: U16CString;
-            let mut window_name_pwstr: PWSTR = PWSTR(null_mut());
+            let window_name_wstr: U16CString;
+            let mut window_name_pwstr = PCWSTR::null();
             if let Some(text) = self.text {
                 window_name_wstr = U16CString::from_str(text).unwrap();
-                window_name_pwstr = PWSTR(window_name_wstr.as_mut_ptr());
+                window_name_pwstr = PCWSTR::from_raw(window_name_wstr.as_ptr());
             }
 
             let mut width = CW_USEDEFAULT;
@@ -84,7 +84,7 @@ impl<'a> FormBuilder<'a> {
             let form_alloc: Rc<Form> = Rc::new(Form {
                 co_initialized,
                 stuck: StuckToThread::new(),
-                handle: Cell::new(0),
+                handle: Cell::new(HWND(0)),
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
                 notify_handlers: RefCell::new(HashMap::new()),
@@ -102,7 +102,7 @@ impl<'a> FormBuilder<'a> {
 
             let handle = CreateWindowExW(
                 ex_style,
-                PWSTR(window_class_atom as usize as *mut u16),
+                PCWSTR::from_raw(window_class_atom as usize as *const u16),
                 window_name_pwstr,
                 WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                 CW_USEDEFAULT,
@@ -112,30 +112,28 @@ impl<'a> FormBuilder<'a> {
                 None,
                 None,
                 instance,
-                form_alloc_ptr as *const c_void as *mut c_void,
+                Some(form_alloc_ptr as *const c_void as *mut c_void),
             );
 
-            if handle == 0 {
+            if handle.0 == 0 {
                 panic!("Failed to create window");
             }
 
-            debug!(
-                "created form window, hwnd {:8x}, state at {:?}",
-                handle, form_alloc_ptr
-            );
+            let _ = SetWindowTheme(handle, PCWSTR::null(), PCWSTR::null());
 
-            let _ = SetWindowTheme(handle, PWSTR(null_mut()), PWSTR(null_mut()));
-
-            let htheme = OpenThemeData(handle, "BUTTON");
-            if htheme != 0 {
+            let button_string = U16CString::from_str_truncate("BUTTON");
+            let htheme = OpenThemeData(handle, PCWSTR::from_raw(button_string.as_ptr()));
+            if htheme.0 != 0 {
                 debug!("ooo, got theme data");
 
                 const BP_CHECKBOX: i32 = 3;
                 const CBS_CHECKEDNORMAL: i32 = 5;
 
                 let part = BP_CHECKBOX;
-                if let Ok(color) = GetThemeColor(htheme, part, CBS_CHECKEDNORMAL, 0) {
-                    debug!("part {}, got theme color: 0x{:x}", part, color);
+                if let Ok(color) =
+                    GetThemeColor(htheme, part, CBS_CHECKEDNORMAL, THEME_PROPERTY_SYMBOL_ID(0))
+                {
+                    debug!("part {}, got theme color: 0x{:x}", part, color.0);
                 } else {
                     warn!("part {}, failed to get theme color", part);
                 }
@@ -146,7 +144,6 @@ impl<'a> FormBuilder<'a> {
             }
 
             let htheme = GetWindowTheme(handle);
-            debug!("htheme: 0x{:x}", htheme);
 
             // Store the window handle, now that we know it, in the FormState.
             form_alloc.handle.set(handle);
@@ -155,7 +152,7 @@ impl<'a> FormBuilder<'a> {
                 form_alloc.background_brush.set(Some(br));
             }
 
-            SendMessageW(handle, WM_THEMECHANGED, 0, 0);
+            SendMessageW(handle, WM_THEMECHANGED, WPARAM(0), LPARAM(0));
 
             form_alloc
         }

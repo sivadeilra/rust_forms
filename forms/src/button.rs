@@ -21,21 +21,21 @@ impl Button {
             let ex_style = 0;
 
             let hwnd = CreateWindowExW(
-                ex_style,
-                PWSTR(class_name_wstr.as_ptr() as *mut _),
-                PWSTR(null_mut()),
+                WINDOW_EX_STYLE(ex_style),
+                PCWSTR::from_raw(class_name_wstr.as_ptr()),
+                PCWSTR::from_raw(null_mut()),
                 WS_CHILD | WS_VISIBLE,
                 0,
                 0,
                 0,
                 0,
                 parent_window,
-                0 as HMENU,     // hmenu,
+                HMENU(0),       // hmenu,
                 get_instance(), // hinstance,
-                null_mut(),
+                None,
             );
 
-            if hwnd == 0 {
+            if hwnd.0 == 0 {
                 panic!("failed to create button window");
             }
 
@@ -48,7 +48,7 @@ impl Button {
             {
                 let mut event_handlers = form.event_handlers.borrow_mut();
                 let handler_rc: Rc<Button> = Rc::clone(&this);
-                event_handlers.insert(hwnd, handler_rc);
+                event_handlers.insert(hwnd.0, handler_rc);
             }
 
             if let Some(font) = form.get_default_button_font() {
@@ -67,7 +67,12 @@ impl Button {
 
     pub fn set_font(&self, font: Rc<Font>) {
         unsafe {
-            SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
+            SendMessageW(
+                self.control.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
             self.font.set(Some(font));
         }
     }
@@ -83,7 +88,7 @@ impl Button {
 
 impl MessageHandlerTrait for Button {
     fn handle_message(&self, _msg: u32, _wparam: WPARAM, _lparam: LPARAM) -> LRESULT {
-        0
+        LRESULT(0)
     }
 
     fn wm_command(&self, _control_id: u16, notify_code: u16) -> LRESULT {
@@ -94,7 +99,7 @@ impl MessageHandlerTrait for Button {
                     self.on_click.set(Some(on_click)); // put it back first
                     (*on_click_clone.handler)(());
                 }
-                0
+                LRESULT(0)
             }
 
             _ => {
@@ -102,7 +107,7 @@ impl MessageHandlerTrait for Button {
                     "button - unrecognized notification code: 0x{:x}",
                     notify_code
                 );
-                0
+                LRESULT(0)
             }
         }
     }

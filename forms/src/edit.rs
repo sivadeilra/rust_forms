@@ -29,43 +29,43 @@ impl Edit {
     pub fn new_with_options(form: &Rc<Form>, options: EditOptions) -> Rc<Edit> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
-            let ex_style: u32 = 0;
+            let ex_style = WINDOW_EX_STYLE(0);
 
             let mut style = WS_CHILD | WS_VISIBLE | WS_BORDER;
             if options.readonly {
-                style |= ES_READONLY as u32;
+                style.0 |= ES_READONLY as u32;
             }
             if options.multiline {
-                style |= ES_MULTILINE as u32 | ES_AUTOVSCROLL as u32;
+                style.0 |= ES_MULTILINE as u32 | ES_AUTOVSCROLL as u32;
             } else {
-                style |= ES_AUTOHSCROLL as u32;
+                style.0 |= ES_AUTOHSCROLL as u32;
             }
             if options.no_hide_selection {
-                style |= ES_NOHIDESEL as u32;
+                style.0 |= ES_NOHIDESEL as u32;
             }
             if options.vertical_scrollbar {
                 style |= WS_VSCROLL;
             }
             if options.want_return {
-                style |= ES_WANTRETURN as u32;
+                style.0 |= ES_WANTRETURN as u32;
             }
 
             let handle = CreateWindowExW(
                 ex_style,
-                PWSTR(class_name.as_ptr() as *mut _),
-                PWSTR(null_mut()),
+                PCWSTR::from_raw(class_name.as_ptr()),
+                PCWSTR::null(),
                 style,
                 0,
                 0,
                 0,
                 0,
-                Some(form.handle()),
-                None,       // menu
-                None,       // instance
-                null_mut(), // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
+                Some(&form.handle()),
+                None, // menu
+                None, // instance
+                None, // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
             );
 
-            if handle == 0 {
+            if handle.0 == 0 {
                 panic!("Failed to create window");
             }
 
@@ -86,7 +86,12 @@ impl Edit {
 
     pub fn set_font(&self, font: Rc<Font>) {
         unsafe {
-            SendMessageW(self.control.handle(), WM_SETFONT, font.hfont as WPARAM, 1);
+            SendMessageW(
+                self.control.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
             self.font.set(Some(font));
         }
     }
@@ -101,7 +106,12 @@ impl Edit {
 
     pub fn set_readonly(&self, value: bool) {
         unsafe {
-            SendMessageW(self.handle(), EM_SETREADONLY, value as WPARAM, 0);
+            SendMessageW(
+                self.handle(),
+                EM_SETREADONLY,
+                WPARAM(value as usize),
+                LPARAM(0),
+            );
         }
     }
 
