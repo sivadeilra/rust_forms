@@ -1,9 +1,10 @@
+use windows::w;
+
 use super::*;
 
 pub struct Button {
     control: ControlState,
     font: Cell<Option<Rc<Font>>>,
-    on_click: Cell<Option<Rc<EventHandler<()>>>>,
 }
 
 impl core::ops::Deref for Button {
@@ -13,25 +14,110 @@ impl core::ops::Deref for Button {
     }
 }
 
+pub struct ButtonBuilder<'a> {
+    form: &'a Rc<Form>,
+    id: ControlId,
+    kind: Option<ButtonKind>,
+    text: Option<String>,
+}
+
+impl<'a> ButtonBuilder<'a> {
+    #[must_use]
+    pub fn kind(mut self, kind: ButtonKind) -> Self {
+        self.kind = Some(kind);
+        self
+    }
+
+    #[must_use]
+    pub fn text(mut self, text: &str) -> Self {
+        self.text = Some(text.to_string());
+        self
+    }
+
+    pub fn build(self) -> Rc<Button> {
+        Button::build(self)
+    }
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum ButtonKind {
+    Command,
+    CheckBox,
+    AutoCheckBox,
+    ThreeState,
+    AutoThreeState,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum CheckState {
+    Checked,
+    Unchecked,
+    Indeterminate,
+}
+
+impl CheckState {
+    fn from_bst(bst: DLG_BUTTON_CHECK_STATE) -> Self {
+        match bst {
+            BST_CHECKED => Self::Checked,
+            BST_UNCHECKED => Self::Unchecked,
+            BST_INDETERMINATE => Self::Indeterminate,
+            _ => Self::Indeterminate,
+        }
+    }
+
+    fn to_bst(self) -> DLG_BUTTON_CHECK_STATE {
+        match self {
+            Self::Checked => BST_CHECKED,
+            Self::Unchecked => BST_UNCHECKED,
+            Self::Indeterminate => BST_INDETERMINATE,
+        }
+    }
+}
+
 impl Button {
-    pub fn new(form: &Rc<Form>) -> Rc<Button> {
+    pub fn new(form: &Rc<Form>, id: ControlId) -> Rc<Button> {
+        Self::builder(form, id).build()
+    }
+
+    pub fn builder(form: &Rc<Form>, id: ControlId) -> ButtonBuilder {
+        ButtonBuilder {
+            form,
+            id,
+            kind: None,
+            text: None,
+        }
+    }
+
+    pub(crate) fn build(builder: ButtonBuilder) -> Rc<Button> {
+        let form = builder.form;
+
         unsafe {
-            let parent_window = form.handle();
-            let class_name_wstr = WCString::from_str_truncate("BUTTON");
+            let parent_window = builder.form.handle();
             let ex_style = 0;
+
+            let mut window_style = WS_CHILD | WS_VISIBLE;
+
+            window_style.0 |= match builder.kind {
+                None => BS_DEFPUSHBUTTON,
+                Some(ButtonKind::AutoCheckBox) => BS_AUTOCHECKBOX,
+                Some(ButtonKind::AutoThreeState) => BS_AUTO3STATE,
+                Some(ButtonKind::Command) => BS_DEFPUSHBUTTON,
+                Some(ButtonKind::ThreeState) => BS_3STATE,
+                Some(ButtonKind::CheckBox) => BS_CHECKBOX,
+            } as u32;
 
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(ex_style),
-                PCWSTR::from_raw(class_name_wstr.as_ptr()),
+                w!("BUTTON"),
                 PCWSTR::from_raw(null_mut()),
-                WS_CHILD | WS_VISIBLE,
+                window_style,
                 0,
                 0,
                 0,
                 0,
                 parent_window,
-                HMENU(0),       // hmenu,
-                get_instance(), // hinstance,
+                HMENU(builder.id.0 as _), // hmenu,
+                get_instance(),           // hinstance,
                 None,
             );
 
@@ -40,19 +126,16 @@ impl Button {
             }
 
             let this = Rc::new(Button {
-                control: ControlState::new(form, hwnd),
-                on_click: Cell::new(None),
+                control: ControlState::new(hwnd),
                 font: Default::default(),
             });
 
-            {
-                let mut event_handlers = form.event_handlers.borrow_mut();
-                let handler_rc: Rc<Button> = Rc::clone(&this);
-                event_handlers.insert(hwnd.0, handler_rc);
-            }
-
             if let Some(font) = form.get_default_button_font() {
                 this.set_font(font);
+            }
+
+            if let Some(text) = &builder.text {
+                this.set_text(text);
             }
 
             this
@@ -81,34 +164,43 @@ impl Button {
         set_window_text(self.control.handle(), text);
     }
 
-    pub fn on_clicked(&self, handler: EventHandler<()>) {
-        self.on_click.set(Some(Rc::new(handler)));
-    }
-}
-
-impl MessageHandlerTrait for Button {
-    fn handle_message(&self, _msg: u32, _wparam: WPARAM, _lparam: LPARAM) -> LRESULT {
-        LRESULT(0)
+    pub fn is_checked(&self) -> bool {
+        unsafe {
+            let result = SendMessageW(self.handle(), BM_GETCHECK, WPARAM(0), LPARAM(0));
+            result.0 == BST_CHECKED.0 as isize
+        }
     }
 
-    fn wm_command(&self, _control_id: u16, notify_code: u16) -> LRESULT {
-        match notify_code as u32 {
-            BN_CLICKED => {
-                if let Some(on_click) = self.on_click.take() {
-                    let on_click_clone = Rc::clone(&on_click);
-                    self.on_click.set(Some(on_click)); // put it back first
-                    (*on_click_clone.handler)(());
-                }
-                LRESULT(0)
-            }
+    pub fn set_checked(&self, value: bool) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                BM_SETCHECK,
+                if value {
+                    WPARAM(BST_CHECKED.0 as _)
+                } else {
+                    WPARAM(BST_UNCHECKED.0 as _)
+                },
+                LPARAM(0),
+            );
+        }
+    }
 
-            _ => {
-                debug!(
-                    "button - unrecognized notification code: 0x{:x}",
-                    notify_code
-                );
-                LRESULT(0)
-            }
+    pub fn get_check_state(&self) -> CheckState {
+        unsafe {
+            let result = SendMessageW(self.handle(), BM_GETCHECK, WPARAM(0), LPARAM(0));
+            CheckState::from_bst(DLG_BUTTON_CHECK_STATE(result.0 as _))
+        }
+    }
+
+    pub fn set_check_state(&self, value: CheckState) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                BM_SETCHECK,
+                WPARAM(value.to_bst().0 as _),
+                LPARAM(0),
+            );
         }
     }
 }

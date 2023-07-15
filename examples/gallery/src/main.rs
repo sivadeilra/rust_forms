@@ -1,9 +1,17 @@
 use forms::{grid::*, *};
+use log::debug;
 use std::rc::Rc;
 
 mod list_view;
 
+const IDC_DEMO_LIST_VIEW: ControlId = ControlId(1);
+const IDC_DEMO_TREE_VIEW: ControlId = ControlId(2);
+const IDC_DEMO_TAB_CONTROL: ControlId = ControlId(3);
+const IDC_DEMO_BUTTONS: ControlId = ControlId(4);
+
 fn main() {
+    env_logger::builder().format_timestamp(None).init();
+
     let form = Form::builder()
         .size(1024, 768)
         .quit_on_close()
@@ -34,29 +42,22 @@ fn main() {
         },
         items: vec![
             {
-                let b = Button::new(&form);
+                let b = Button::new(&form, IDC_DEMO_LIST_VIEW);
                 b.set_text("List View");
-                let form = Rc::clone(&form);
-                b.on_clicked(EventHandler::new(move |_args| {
-                    list_view::demo_list_view(&form);
-                }));
                 GridItem::new(0, 0, LayoutItem::Control(b))
             },
             {
-                let b = Button::new(&form);
+                let b = Button::new(&form, IDC_DEMO_TREE_VIEW);
                 b.set_text("Tree View");
-                b.on_clicked(EventHandler::new(|_args| {
-                    // todo
-                }));
                 GridItem::new(0, 1, LayoutItem::Control(b))
             },
             {
-                let b = Button::new(&form);
+                let b = Button::new(&form, IDC_DEMO_TAB_CONTROL);
                 b.set_text("Tab Control");
                 GridItem::new(1, 0, LayoutItem::Control(b))
             },
             {
-                let b = Button::new(&form);
+                let b = Button::new(&form, IDC_DEMO_BUTTONS);
                 b.set_text("Buttons");
                 GridItem::new(1, 1, LayoutItem::Control(b))
             },
@@ -72,5 +73,24 @@ fn main() {
         ],
     }));
 
-    form.show_modal();
+    let real_form = form;
+
+    let form = Rc::clone(&real_form);
+
+    real_form.command_handler(Box::new(move |control, command| match (control, command) {
+        (IDC_DEMO_TREE_VIEW, Command::ButtonClicked) => {
+            debug!("demoing tree view");
+        }
+
+        (IDC_DEMO_LIST_VIEW, Command::ButtonClicked) => {
+            debug!("demoing list view");
+            list_view::demo_list_view(&form);
+        }
+
+        _ => {
+            debug!("command handler: {control:?} {command:?}");
+        }
+    }));
+
+    real_form.show_modal();
 }

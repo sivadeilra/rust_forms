@@ -1,4 +1,4 @@
-pub fn add_manifest() {
+fn main() {
     println!("cargo:rustc-link-arg=/manifest:embed");
     println!(
         "cargo:rustc-link-arg=/manifestdependency:type='win32' \

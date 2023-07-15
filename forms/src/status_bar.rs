@@ -36,7 +36,7 @@ impl StatusBar {
             }
 
             let state: Rc<StatusBar> = Rc::new(StatusBar {
-                control: ControlState::new(form, hwnd),
+                control: ControlState::new(hwnd),
             });
             form.invalidate_layout();
             state

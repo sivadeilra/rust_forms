@@ -40,7 +40,7 @@ impl Label {
             }
 
             let this = Label {
-                control: ControlState::new(form, hwnd),
+                control: ControlState::new(hwnd),
             };
 
             if let Some(f) = form.get_default_static_font() {

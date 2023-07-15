@@ -89,8 +89,10 @@ version = "0.1.0"
 name = "gallery"
 version = "0.1.0"
 dependencies = [
+ "env_logger",
  "forms",
  "forms_build",
+ "log",
 ]
 
 [[package]]

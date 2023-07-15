@@ -1,7 +1,9 @@
 use super::*;
+use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
 use log::debug;
+use std::cell::OnceCell;
 use std::sync::Once;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
@@ -27,14 +29,13 @@ pub struct Form {
     // Key is HWND
     pub(crate) notify_handlers: RefCell<HashMap<isize, NotifyHandler>>,
 
-    /// Key is HWND
-    pub(crate) event_handlers: RefCell<HashMap<isize, Rc<dyn MessageHandlerTrait>>>,
-
     pub(crate) default_static_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
     pub(crate) background_brush: Cell<Option<Brush>>,
     pub(crate) background_color: Cell<ColorRef>,
+
+    command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
 
     status_bar: Cell<Option<Rc<StatusBar>>>,
 }
@@ -175,6 +176,17 @@ impl Form {
         unsafe {
             EnableWindow(self.handle(), BOOL(value as i32));
         }
+    }
+
+    pub fn command_handler<F>(&self, handler: F)
+    where
+        F: Fn(ControlId, Command) + 'static,
+    {
+        let result = self.command_handler.set(Box::new(handler));
+        assert!(
+            result.is_ok(),
+            "cannot call command_handler() more than once"
+        );
     }
 }
 
@@ -372,6 +384,8 @@ extern "system" fn form_wndproc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging as wm;
+
     unsafe {
         match message {
             WM_CREATE => {
@@ -443,6 +457,16 @@ extern "system" fn form_wndproc(
             WM_COMMAND => {
                 // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
 
+                let control = ControlId(wparam_loword(wparam));
+                let command = Command(wparam_hiword(wparam) as u32);
+
+                if let Some(handler) = state.command_handler.get() {
+                    handler(control, command);
+                } else {
+                    debug!("WM_COMMAND: no handler is installed");
+                }
+
+                /*
                 if lparam.0 != 0 {
                     // It's a child window handle.
                     let child_hwnd: HWND = HWND(lparam.0);
@@ -472,6 +496,7 @@ extern "system" fn form_wndproc(
                     debug!("WM_COMMAND: 0x{:x}", wparam.0);
                     // return 0;
                 }
+                */
             }
 
             // WM_NOTIFY is used by most of the Common Controls to communicate
@@ -568,6 +593,17 @@ extern "system" fn form_wndproc(
 
         DefWindowProcW(window, message, wparam, lparam)
     }
+}
+
+#[inline(always)]
+fn wparam_loword(wp: WPARAM) -> u16 {
+    wp.0 as u16
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+fn wparam_hiword(wp: WPARAM) -> u16 {
+    (wp.0 >> 16) as u16
 }
 
 impl Drop for Form {

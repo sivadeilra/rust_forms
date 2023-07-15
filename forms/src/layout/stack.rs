@@ -19,6 +19,32 @@ pub enum Orientation {
 }
 
 impl StackLayout {
+    // Constructors
+
+    pub fn new(orientation: Orientation, pitch: i32) -> Self {
+        Self {
+            orientation,
+            lead_margin: 0,
+            tail_margin: 0,
+            padding: 5,
+            pitch,
+            items: Vec::new(),
+        }
+    }
+
+    pub fn vertical(pitch: i32) -> Self {
+        Self::new(Orientation::Vertical, pitch)
+    }
+
+    pub fn horizontal(pitch: i32) -> Self {
+        Self::new(Orientation::Horizontal, pitch)
+    }
+
+    pub fn control(mut self, control: Rc<dyn core::ops::Deref<Target = ControlState>>) -> Self {
+        self.items.push(LayoutItem::Control(control));
+        self
+    }
+
     pub(crate) fn place(
         &self,
         placer: &mut dyn LayoutPlacer,

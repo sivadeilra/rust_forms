@@ -17,6 +17,52 @@ pub struct GridAxis {
     pub tail_margin: i32,
 }
 
+impl GridAxis {
+    pub fn new() -> Self {
+        Self {
+            cells: vec![],
+            padding: 5,
+            lead_margin: 2,
+            tail_margin: 2,
+        }
+    }
+
+    pub fn padding(mut self, padding: i32) -> Self {
+        self.padding = padding;
+        self
+    }
+
+    pub fn lead_margin(mut self, lead_margin: i32) -> Self {
+        self.lead_margin = lead_margin;
+        self
+    }
+
+    pub fn tail_margin(mut self, tail_margin: i32) -> Self {
+        self.tail_margin = tail_margin;
+        self
+    }
+
+    pub fn auto(mut self) -> Self {
+        self.cells.push(GridAxisCell::auto(0));
+        self
+    }
+
+    pub fn auto_min(mut self, min: i32) -> Self {
+        self.cells.push(GridAxisCell::auto(min));
+        self
+    }
+
+    pub fn scaled(mut self, scale: f32, min: i32) -> Self {
+        self.cells.push(GridAxisCell::scaled(scale, min));
+        self
+    }
+
+    pub fn fixed(mut self, size: i32) -> Self {
+        self.cells.push(GridAxisCell::fixed(size));
+        self
+    }
+}
+
 /// Describes one span within a horizontal or vertical axis of a GridLayout.
 #[derive(Debug)]
 pub struct GridAxisCell {
@@ -76,13 +122,7 @@ pub struct GridItem {
 }
 
 impl GridItem {
-    pub fn new_spanned(
-        row: u16,
-        col: u16,
-        row_span: u16,
-        col_span: u16,
-        item: LayoutItem,
-    ) -> GridItem {
+    pub fn new_spanned(row: u16, col: u16, row_span: u16, col_span: u16, item: LayoutItem) -> Self {
         GridItem {
             col,
             row,
@@ -91,7 +131,8 @@ impl GridItem {
             item,
         }
     }
-    pub fn new(row: u16, col: u16, item: LayoutItem) -> GridItem {
+
+    pub fn new(row: u16, col: u16, item: LayoutItem) -> Self {
         GridItem {
             col,
             row,
@@ -99,6 +140,20 @@ impl GridItem {
             row_span: 1,
             item,
         }
+    }
+
+    pub fn control(row: u16, col: u16, c: Rc<dyn core::ops::Deref<Target = ControlState>>) -> Self {
+        Self::new(row, col, LayoutItem::Control(c))
+    }
+
+    pub fn col_span(mut self, col_span: u16) -> Self {
+        self.col_span = col_span;
+        self
+    }
+
+    pub fn row_span(mut self, row_span: u16) -> Self {
+        self.row_span = row_span;
+        self
     }
 }
 

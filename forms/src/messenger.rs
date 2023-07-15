@@ -2,12 +2,12 @@
 //!
 
 use super::*;
-use std::sync::Once;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use std::collections::VecDeque;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
+use std::sync::Once;
 use std::sync::{Arc, Mutex};
 use windows::Win32::System::Threading::{QueueUserWorkItem, WORKER_THREAD_FLAGS};
 

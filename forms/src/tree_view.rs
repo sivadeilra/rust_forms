@@ -85,7 +85,7 @@ impl TreeView {
             }
 
             let state: Rc<TreeView> = Rc::new(TreeView {
-                control: ControlState::new(form, hwnd),
+                control: ControlState::new(hwnd),
                 handlers: RefCell::new(Vec::new()),
                 items: RefCell::new(HashMap::new()),
             });
@@ -101,6 +101,21 @@ impl TreeView {
             );
             state
         }
+    }
+
+    pub fn get_has_lines(&self) -> bool {
+        self.control
+            .get_window_style_flag(WINDOW_STYLE(TVS_HASLINES))
+    }
+
+    pub fn set_has_lines(&self, value: bool) {
+        self.control
+            .set_window_style_flag(WINDOW_STYLE(TVS_HASLINES), value);
+    }
+
+    pub fn set_check_boxes(&self, value: bool) {
+        self.control
+            .set_window_style_flag(WINDOW_STYLE(TVS_CHECKBOXES), value);
     }
 
     // Appearance properties

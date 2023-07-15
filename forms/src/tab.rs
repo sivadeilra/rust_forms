@@ -37,7 +37,7 @@ impl TabControl {
             }
 
             Rc::new(Self {
-                control: ControlState::new(parent, hwnd),
+                control: ControlState::new(hwnd),
             })
         }
     }

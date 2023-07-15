@@ -69,7 +69,7 @@ impl Edit {
                 panic!("Failed to create window");
             }
 
-            let control = ControlState::new(form, handle);
+            let control = ControlState::new(handle);
 
             let this = Rc::new(Edit {
                 control,

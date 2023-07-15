@@ -4,8 +4,6 @@ static_assertions::assert_not_impl_any!(ControlState: Send, Sync);
 
 pub struct ControlState {
     pub(crate) stuck: StuckToThread,
-    #[allow(dead_code)]
-    pub(crate) form: Weak<Form>,
     hwnd: HWND,
 }
 
@@ -25,11 +23,10 @@ impl ControlState {
         self.stuck.check();
     }
 
-    pub(crate) fn new(form: &Rc<Form>, hwnd: HWND) -> ControlState {
+    pub(crate) fn new(hwnd: HWND) -> ControlState {
         Self {
             hwnd,
             stuck: StuckToThread::new(),
-            form: Rc::downgrade(form),
         }
     }
 
@@ -40,6 +37,11 @@ impl ControlState {
 
     pub(crate) fn get_window_style(&self) -> WINDOW_STYLE {
         unsafe { WINDOW_STYLE(GetWindowLongW(self.hwnd, GWL_STYLE) as u32) }
+    }
+
+    pub(crate) fn get_window_style_flag(&self, flag: WINDOW_STYLE) -> bool {
+        let styles = self.get_window_style();
+        styles.0 & flag.0 != 0
     }
 
     #[allow(dead_code)]
@@ -123,4 +125,43 @@ pub struct CreateControlOptions {
     pub y: i32,
     pub width: i32,
     pub height: i32,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
+pub struct ControlId(pub u16);
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Command(pub u32);
+
+macro_rules! commands {
+    (
+        $($value:expr, $name:ident;)*
+    ) => {
+        impl Command {
+            $(
+                #[allow(non_upper_case_globals)]
+                pub const $name: Command = Command($value);
+            )*
+        }
+
+        impl std::fmt::Debug for Command {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match *self {
+                    $( Self::$name => f.write_str(stringify!($name)), )*
+                    _ => write!(f, "??(0x{:04x})", self.0)
+                }
+            }
+        }
+    }
+}
+
+use windows::Win32::UI::WindowsAndMessaging as wm;
+
+commands! {
+    wm::BN_CLICKED, ButtonClicked; // 0
+    wm::BN_PAINT, ButtonPaint; // 1
+    wm::BN_HILITE, ButtonHilite; // 2
+    wm::BN_DISABLE, ButtonDisable; // 4
+    wm::BN_DBLCLK, ButtonDoubleClicked; // 5
+    wm::BN_KILLFOCUS, ButtonKillFocus; // 7
 }

@@ -96,7 +96,6 @@ impl<'a> FormBuilder<'a> {
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
                 notify_handlers: RefCell::new(HashMap::new()),
-                event_handlers: RefCell::new(HashMap::new()),
                 default_edit_font: Default::default(),
                 default_button_font: Default::default(),
                 layout: RefCell::new(None),
@@ -105,6 +104,7 @@ impl<'a> FormBuilder<'a> {
                 background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
                 status_bar: Cell::new(None),
                 default_static_font: Default::default(),
+                command_handler: Default::default(),
             });
 
             let form_alloc_ptr: *const Form = &*form_alloc;

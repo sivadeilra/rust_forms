@@ -47,7 +47,7 @@ impl ListView {
             }
 
             let state: Rc<ListView> = Rc::new(ListView {
-                control: ControlState::new(form, hwnd),
+                control: ControlState::new(hwnd),
                 handlers: RefCell::new(Vec::new()),
             });
             form.invalidate_layout();
@@ -153,8 +153,16 @@ impl ListView {
         self.set_ex_style(mask, if value { mask } else { 0 });
     }
 
+    fn get_ex_style_bool(&self, mask: u32) -> bool {
+        self.get_ex_style().0 & mask != 0
+    }
+
     pub fn set_full_row_select(&self, value: bool) {
         self.set_ex_style_bool(LVS_EX_FULLROWSELECT, value);
+    }
+
+    pub fn get_full_row_select(&self) -> bool {
+        self.get_ex_style_bool(LVS_EX_FULLROWSELECT)
     }
 
     pub fn set_check_boxes(&self, value: bool) {

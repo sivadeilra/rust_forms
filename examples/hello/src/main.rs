@@ -19,6 +19,10 @@ struct AppState {
     status_bar: Rc<StatusBar>,
 }
 
+const CONTROL_ID_QUERY_BUTTON: ControlId = ControlId(1);
+const CONTROL_ID_ROOT_DIRECTORY: ControlId = ControlId(2);
+const CONTROL_ID_REGEX: ControlId = ControlId(3);
+
 fn main() {
     let form = Form::builder()
         .size(1600, 1200)
@@ -41,7 +45,7 @@ fn main() {
         }),
 
         commands_sender,
-        query_button: Button::new(&form).with(|w| {
+        query_button: Button::new(&form, CONTROL_ID_QUERY_BUTTON).with(|w| {
             w.set_text("Search");
             w.set_tab_stop(true);
         }),
@@ -100,32 +104,34 @@ fn main() {
         ],
     }));
 
-    // Set up event handlers.
-    app.query_button.on_clicked(EventHandler::new({
+    {
         let app = app.clone();
-        move |()| {
-            let root_directory = app.root_directory.get_text();
-            let regex_text = app.regex.get_text();
-            match Regex::new(&regex_text) {
-                Ok(regex) => {
-                    app.status_bar.set_status("Running query...");
-                    app.results.delete_all_items();
-                    app.commands_sender
-                        .send(WorkerCommand::Search {
-                            root_directory,
-                            regex,
-                            max_results: 50,
-                            recursive: true,
-                        })
-                        .unwrap();
-                }
-                Err(e) => {
-                    app.status_bar
-                        .set_status(&format!("Invalid regex: {:?}", e));
+        form.command_handler(move |control, command| match (control, command) {
+            (CONTROL_ID_QUERY_BUTTON, Command::ButtonClicked) => {
+                let root_directory = app.root_directory.get_text();
+                let regex_text = app.regex.get_text();
+                match Regex::new(&regex_text) {
+                    Ok(regex) => {
+                        app.status_bar.set_status("Running query...");
+                        app.results.delete_all_items();
+                        app.commands_sender
+                            .send(WorkerCommand::Search {
+                                root_directory,
+                                regex,
+                                max_results: 50,
+                                recursive: true,
+                            })
+                            .unwrap();
+                    }
+                    Err(e) => {
+                        app.status_bar
+                            .set_status(&format!("Invalid regex: {:?}", e));
+                    }
                 }
             }
-        }
-    }));
+            _ => {}
+        });
+    }
 
     // Start our worker thread.
 
