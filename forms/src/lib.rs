@@ -18,6 +18,7 @@ mod ffi;
 pub mod file_dialog;
 mod font;
 mod form;
+pub mod init;
 mod label;
 pub mod layout;
 pub mod list_view;
@@ -25,6 +26,7 @@ mod menu;
 mod messenger;
 mod status_bar;
 mod system_params;
+mod tab;
 pub mod tree_view;
 
 pub use app::*;
@@ -43,6 +45,7 @@ pub use list_view::{ListView, Mode};
 pub use menu::*;
 pub use messenger::{Messenger, Sender};
 pub use status_bar::*;
+pub use tab::*;
 pub use tree_view::{TreeNode, TreeView, TreeViewOptions};
 pub use windows::Win32::Foundation::RECTL as Rect;
 
@@ -125,30 +128,9 @@ pub(crate) fn get_window_text(hwnd: HWND) -> String {
     }
 }
 
-fn init_common_controls() {
-    debug!("init_common_controls");
-    INIT_COMMON_CONTROLS.call_once(|| unsafe {
-        debug!("calling InitCommonControls (in once)");
-        let mut icc: INITCOMMONCONTROLSEX = zeroed();
-        icc.dwSize = size_of::<INITCOMMONCONTROLSEX>() as u32;
-        icc.dwICC = ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
-
-        let icc_result = InitCommonControlsEx(&icc).ok();
-        debug!("icc_result: {:?}", icc_result);
-
-        SetThemeAppProperties(SET_THEME_APP_PROPERTIES_FLAGS(
-            STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT,
-        ));
-    });
-}
-
 const STAP_ALLOW_NONCLIENT: u32 = 1 << 0;
 const STAP_ALLOW_CONTROLS: u32 = 1 << 1;
 const STAP_ALLOW_WEBCONTENT: u32 = 1 << 2;
-
-use std::sync::Once;
-
-static INIT_COMMON_CONTROLS: Once = Once::new();
 
 pub(crate) const WM_NOTIFY: u32 = 0x004E;
 

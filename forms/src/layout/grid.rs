@@ -8,7 +8,7 @@ pub struct GridLayout {
 }
 
 /// Describes the horizontal (or vertical) axis of a GridLayout.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct GridAxis {
     pub cells: Vec<GridAxisCell>,
     // Spacing between each row (column).

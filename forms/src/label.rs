@@ -39,13 +39,31 @@ impl Label {
                 panic!("failed to create control window");
             }
 
-            Rc::new(Label {
+            let this = Label {
                 control: ControlState::new(form, hwnd),
-            })
+            };
+
+            if let Some(f) = form.get_default_static_font() {
+                this.set_font(f);
+            }
+
+            Rc::new(this)
         }
     }
 
     pub fn set_text(&self, text: &str) {
         set_window_text(self.control.handle(), text);
+    }
+
+    pub fn set_font(&self, font: Rc<Font>) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
+            // self.font.set(Some(font));
+        }
     }
 }

@@ -1,8 +1,10 @@
 use super::*;
+use windows::w;
 
 pub struct FormBuilder<'a> {
     text: Option<&'a str>,
     size: Option<(i32, i32)>,
+    parent: Option<&'a Form>,
     quit_on_close: Option<i32>,
 }
 
@@ -11,6 +13,7 @@ impl<'a> Default for FormBuilder<'a> {
         Self {
             text: None,
             size: None,
+            parent: None,
             quit_on_close: Some(0),
         }
     }
@@ -19,6 +22,11 @@ impl<'a> Default for FormBuilder<'a> {
 impl<'a> FormBuilder<'a> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn parent(&mut self, parent: &'a Form) -> &mut Self {
+        self.parent = Some(parent);
+        self
     }
 
     pub fn text(&mut self, text: &'a str) -> &mut Self {
@@ -47,7 +55,7 @@ impl<'a> FormBuilder<'a> {
     }
 
     pub fn build(&self) -> Rc<Form> {
-        init_common_controls();
+        crate::init::init_common_controls();
 
         unsafe {
             let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
@@ -96,9 +104,16 @@ impl<'a> FormBuilder<'a> {
                 background_brush: Default::default(),
                 background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
                 status_bar: Cell::new(None),
+                default_static_font: Default::default(),
             });
 
             let form_alloc_ptr: *const Form = &*form_alloc;
+
+            let parent_window_handle: HWND = if let Some(parent) = self.parent {
+                parent.handle()
+            } else {
+                HWND(0)
+            };
 
             let handle = CreateWindowExW(
                 ex_style,
@@ -109,7 +124,7 @@ impl<'a> FormBuilder<'a> {
                 CW_USEDEFAULT,
                 width,
                 height,
-                None,
+                parent_window_handle,
                 None,
                 instance,
                 Some(form_alloc_ptr as *const c_void as *mut c_void),
@@ -119,7 +134,7 @@ impl<'a> FormBuilder<'a> {
                 panic!("Failed to create window");
             }
 
-            let _ = SetWindowTheme(handle, PCWSTR::null(), PCWSTR::null());
+            let _ = SetWindowTheme(handle, w!("Explorer"), PCWSTR::null());
 
             let button_string = U16CString::from_str_truncate("BUTTON");
             let htheme = OpenThemeData(handle, PCWSTR::from_raw(button_string.as_ptr()));
@@ -145,6 +160,26 @@ impl<'a> FormBuilder<'a> {
 
             let htheme = GetWindowTheme(handle);
 
+            let mut logfont: LOGFONTW = zeroed();
+            match GetThemeSysFont(htheme, TMT_STATUSFONT, &mut logfont) {
+                Ok(f) => {
+                    debug!(
+                        "GetThemeFont succeeded: {}",
+                        U16CString::from_ptr_str(logfont.lfFaceName.as_ptr()).to_string_lossy()
+                    );
+                    match Font::from_logfont(&logfont) {
+                        Ok(f) => {
+                            form_alloc.default_static_font.set(Some(Rc::new(f)));
+                        }
+                        Err(_e) => {}
+                    }
+                    // Font::new(font_family, height)
+                }
+                Err(e) => {
+                    warn!("GetThemeFont: {}", e);
+                }
+            }
+
             // Store the window handle, now that we know it, in the FormState.
             form_alloc.handle.set(handle);
 
@@ -153,6 +188,16 @@ impl<'a> FormBuilder<'a> {
             }
 
             SendMessageW(handle, WM_THEMECHANGED, WPARAM(0), LPARAM(0));
+
+            /*
+            match Font::new("Arial", 10) {
+                Ok(font) => {
+                    debug!("setting font");
+                    form_alloc.default_static_font.set(Some(font));
+                }
+                Err(_e) => {}
+            }
+            */
 
             form_alloc
         }

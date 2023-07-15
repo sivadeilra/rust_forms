@@ -20,8 +20,6 @@ struct AppState {
 }
 
 fn main() {
-    env_logger::init();
-
     let form = Form::builder()
         .size(1600, 1200)
         .quit_on_close()

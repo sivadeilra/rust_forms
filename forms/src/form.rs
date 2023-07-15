@@ -30,6 +30,7 @@ pub struct Form {
     /// Key is HWND
     pub(crate) event_handlers: RefCell<HashMap<isize, Rc<dyn MessageHandlerTrait>>>,
 
+    pub(crate) default_static_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
     pub(crate) background_brush: Cell<Option<Brush>>,
@@ -99,6 +100,16 @@ impl Form {
         clone_cell_opt_rc(&self.default_edit_font)
     }
 
+    pub fn set_default_static_font(&self, font: Option<Rc<Font>>) {
+        self.stuck.check();
+        self.default_static_font.set(font);
+    }
+
+    pub fn get_default_static_font(&self) -> Option<Rc<Font>> {
+        self.stuck.check();
+        clone_cell_opt_rc(&self.default_static_font)
+    }
+
     pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
         self.stuck.check();
         self.default_button_font.set(font);
@@ -145,6 +156,24 @@ impl Form {
             Some(sb)
         } else {
             None
+        }
+    }
+
+    pub fn set_font(&self, font: Rc<Font>) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
+            // self.font.set(Some(font));
+        }
+    }
+
+    pub fn enable(&self, value: bool) {
+        unsafe {
+            EnableWindow(self.handle(), BOOL(value as i32));
         }
     }
 }
@@ -247,9 +276,25 @@ impl Form {
 
 impl Form {
     pub fn show_modal(&self) {
+        self.show_modal_under(None)
+    }
+
+    pub fn show_modal_under(&self, parent: Option<&Form>) {
         self.stuck.check();
+
+        let disabler: Option<DisabledFormScope> = if let Some(p) = parent {
+            unsafe {
+                EnableWindow(p.handle(), BOOL(0));
+            }
+            Some(DisabledFormScope { form: p.handle() })
+        } else {
+            None
+        };
+
         self.show_window();
         self.event_loop();
+
+        drop(disabler);
     }
 
     fn event_loop(&self) {
@@ -274,6 +319,18 @@ impl Form {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+        }
+    }
+}
+
+struct DisabledFormScope {
+    pub(crate) form: HWND,
+}
+
+impl Drop for DisabledFormScope {
+    fn drop(&mut self) {
+        unsafe {
+            EnableWindow(self.form, BOOL(1));
         }
     }
 }

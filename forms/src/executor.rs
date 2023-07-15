@@ -27,7 +27,7 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering::SeqCst};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Once};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 #[derive(Clone)]

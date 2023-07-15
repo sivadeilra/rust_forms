@@ -1,7 +1,9 @@
 [workspace] 
 members = [
+    "examples/gallery",
     "examples/hello",
     "forms",
+    "forms_build",
 ]
 
 [workspace.dependencies]
