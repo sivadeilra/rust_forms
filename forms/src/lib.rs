@@ -92,24 +92,6 @@ pub struct Size(i32, i32);
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Point(i32, i32);
 
-/// Wraps a function that can handle an event of a given type.
-pub struct EventHandler<E> {
-    pub(crate) handler: Box<dyn Fn(E)>,
-}
-
-impl<E> EventHandler<E> {
-    pub fn new<H>(handler: H) -> Self
-    where
-        H: Fn(E) + 'static,
-    {
-        Self {
-            handler: Box::new(handler),
-        }
-    }
-}
-
-pub struct ControlHost {}
-
 pub(crate) fn set_window_text(hwnd: HWND, text: &str) {
     unsafe {
         let ws = WCString::from_str_truncate(text);

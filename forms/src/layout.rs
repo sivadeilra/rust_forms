@@ -106,3 +106,22 @@ pub enum VerticalAlignment {
     Bottom,
     Baseline,
 }
+
+pub(crate) struct DeferredLayoutPlacer {
+    op: DeferWindowPosOp,
+}
+
+impl DeferredLayoutPlacer {
+    pub(crate) fn new(n: u32) -> Self {
+        Self {
+            op: DeferWindowPosOp::begin(10).unwrap(),
+        }
+    }
+}
+
+impl LayoutPlacer for DeferredLayoutPlacer {
+    fn place_control(&mut self, control: &ControlState, x: i32, y: i32, width: i32, height: i32) {
+        self.op
+            .defer(control.handle(), HWND(0), x, y, width, height, SWP_NOZORDER);
+    }
+}

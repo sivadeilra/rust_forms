@@ -197,7 +197,7 @@ impl GridAxis {
     fn place(&self, size: i32) -> Vec<GridAxisPlacement> {
         assert!(size >= 0);
 
-        debug!("GridAxis::place: {:?}", self);
+        // debug!("GridAxis::place: {:?}", self);
 
         if self.cells.is_empty() {
             return Vec::new();

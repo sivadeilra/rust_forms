@@ -118,6 +118,14 @@ impl ControlState {
         }
     }
 
+    pub fn get_client_rect(&self) -> RECT {
+        unsafe {
+            let mut client_rect: RECT = zeroed();
+            GetClientRect(self.hwnd, &mut client_rect);
+            client_rect
+        }
+    }
+
     pub fn set_visible(&self, value: bool) {
         self.set_window_style_flag(WS_VISIBLE, value);
     }

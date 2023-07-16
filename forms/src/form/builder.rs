@@ -105,6 +105,7 @@ impl<'a> FormBuilder<'a> {
                 default_static_font: Default::default(),
                 command_handler: Default::default(),
                 notify_handler: Default::default(),
+                tab_controls: Default::default(),
             });
 
             let form_alloc_ptr: *const Form = &*form_alloc;

@@ -16,6 +16,7 @@ impl core::ops::Deref for Button {
 
 pub struct ButtonBuilder<'a> {
     form: &'a Rc<Form>,
+    parent: Option<&'a ControlState>,
     id: ControlId,
     kind: Option<ButtonKind>,
     text: Option<String>,
@@ -31,6 +32,12 @@ impl<'a> ButtonBuilder<'a> {
     #[must_use]
     pub fn text(mut self, text: &str) -> Self {
         self.text = Some(text.to_string());
+        self
+    }
+
+    #[must_use]
+    pub fn parent(mut self, parent: &'a ControlState) -> Self {
+        self.parent = Some(parent);
         self
     }
 
@@ -85,6 +92,7 @@ impl Button {
             id,
             kind: None,
             text: None,
+            parent: None,
         }
     }
 
@@ -92,7 +100,12 @@ impl Button {
         let form = builder.form;
 
         unsafe {
-            let parent_window = builder.form.handle();
+            let parent_window = if let Some(parent) = builder.parent {
+                parent.handle()
+            } else {
+                builder.form.handle()
+            };
+
             let ex_style = 0;
 
             let mut window_style = WS_CHILD | WS_VISIBLE;

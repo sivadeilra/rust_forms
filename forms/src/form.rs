@@ -34,6 +34,8 @@ pub struct Form {
     notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
 
     status_bar: Cell<Option<Rc<StatusBar>>>,
+
+    pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControl>>>,
 }
 
 assert_not_impl_any!(Form: Send, Sync);
@@ -223,34 +225,8 @@ impl Form {
                         layout_height -= sb_height;
                     }
 
-                    struct DeferredLayoutPlacer {
-                        op: DeferWindowPosOp,
-                    }
-
-                    impl LayoutPlacer for DeferredLayoutPlacer {
-                        fn place_control(
-                            &mut self,
-                            control: &ControlState,
-                            x: i32,
-                            y: i32,
-                            width: i32,
-                            height: i32,
-                        ) {
-                            self.op.defer(
-                                control.handle(),
-                                HWND(0),
-                                x,
-                                y,
-                                width,
-                                height,
-                                SWP_NOZORDER,
-                            );
-                        }
-                    }
-
-                    let mut deferred_placer = DeferredLayoutPlacer {
-                        op: DeferWindowPosOp::begin(10).unwrap(),
-                    };
+                    debug!("doing placement for tab control");
+                    let mut deferred_placer = DeferredLayoutPlacer::new(10);
 
                     layout.place(
                         &mut deferred_placer,
@@ -458,38 +434,6 @@ extern "system" fn form_wndproc(
                 } else {
                     debug!("WM_COMMAND: no handler is installed");
                 }
-
-                /*
-                if lparam.0 != 0 {
-                    // It's a child window handle.
-                    let child_hwnd: HWND = HWND(lparam.0);
-
-                    let event_handlers = state.event_handlers.borrow();
-                    if let Some(handler) = event_handlers.get(&child_hwnd.0) {
-                        debug!(
-                            "WM_COMMAND: 0x{:x} hwnd 0x{:x} - found handler",
-                            wparam.0, lparam.0
-                        );
-
-                        let h = Rc::clone(handler);
-                        drop(event_handlers); // drop the dynamic borrow
-
-                        let notify_code = (wparam.0 >> 16) as u16;
-                        let control_id = wparam.0 as u16;
-
-                        return h.wm_command(control_id, notify_code);
-                    } else {
-                        debug!(
-                            "WM_COMMAND: 0x{:x} hwnd 0x{:x} - no handler found",
-                            wparam.0, lparam.0
-                        );
-                        return LRESULT(0);
-                    }
-                } else {
-                    debug!("WM_COMMAND: 0x{:x}", wparam.0);
-                    // return 0;
-                }
-                */
             }
 
             // WM_NOTIFY is used by most of the Common Controls to communicate
@@ -498,7 +442,22 @@ extern "system" fn form_wndproc(
             WM_NOTIFY => {
                 let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
+                let notify_code = (*nmhdr_ptr).code;
                 let notify = Notify::from_nmhdr(nmhdr_ptr);
+
+                // For some notifications, we need to handle the notification directly.
+                match notify_code {
+                    TCN_SELCHANGE => {
+                        let tab_controls = state.tab_controls.borrow();
+                        for weak_tab_control in tab_controls.iter() {
+                            if let Some(tab_control) = weak_tab_control.upgrade() {
+                                // TODO: check that this is the right tab control
+                                tab_control.sync_visible();
+                            }
+                        }
+                    }
+                    _ => {}
+                }
 
                 if let Some(handler) = state.notify_handler.get() {
                     handler(&notify);
