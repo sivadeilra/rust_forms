@@ -95,7 +95,6 @@ impl<'a> FormBuilder<'a> {
                 handle: Cell::new(HWND(0)),
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
-                notify_handlers: RefCell::new(HashMap::new()),
                 default_edit_font: Default::default(),
                 default_button_font: Default::default(),
                 layout: RefCell::new(None),
@@ -105,6 +104,7 @@ impl<'a> FormBuilder<'a> {
                 status_bar: Cell::new(None),
                 default_static_font: Default::default(),
                 command_handler: Default::default(),
+                notify_handler: Default::default(),
             });
 
             let form_alloc_ptr: *const Form = &*form_alloc;

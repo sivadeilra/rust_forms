@@ -37,7 +37,7 @@ fn main() {
 
     let app: Rc<AppState> = Rc::new(AppState {
         results: ListView::new(&form).with(|w| {
-            w.set_view(Mode::Details);
+            w.set_mode(Mode::Details);
             w.set_full_row_select(true);
             w.set_grid_lines(true);
             w.add_column(0, 300, "File");

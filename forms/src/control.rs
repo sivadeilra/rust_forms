@@ -117,6 +117,16 @@ impl ControlState {
             );
         }
     }
+
+    pub fn set_visible(&self, value: bool) {
+        self.set_window_style_flag(WS_VISIBLE, value);
+    }
+
+    pub fn invalidate_all(&self) {
+        unsafe {
+            InvalidateRect(self.hwnd, None, TRUE);
+        }
+    }
 }
 
 #[derive(Default)]

@@ -10,7 +10,6 @@ impl core::ops::Deref for TreeView {
 
 pub struct TreeView {
     control: ControlState,
-    handlers: RefCell<Vec<Rc<TreeViewHandler>>>,
 
     // key is HTREEITEM
     items: RefCell<HashMap<isize, Rc<NodeState>>>,
@@ -84,22 +83,12 @@ impl TreeView {
                 panic!("failed to create TreeView window");
             }
 
-            let state: Rc<TreeView> = Rc::new(TreeView {
-                control: ControlState::new(hwnd),
-                handlers: RefCell::new(Vec::new()),
-                items: RefCell::new(HashMap::new()),
-            });
             form.invalidate_layout();
 
-            let mut notify_handlers = form.notify_handlers.borrow_mut();
-            let state_rc: Rc<TreeView> = Rc::clone(&state);
-            notify_handlers.insert(
-                state.handle().0,
-                NotifyHandler {
-                    handler: Rc::new(TreeViewNotifyShim { tree: state_rc }),
-                },
-            );
-            state
+            Rc::new(TreeView {
+                control: ControlState::new(hwnd),
+                items: RefCell::new(HashMap::new()),
+            })
         }
     }
 
@@ -198,29 +187,6 @@ impl TreeView {
                 tree: Rc::clone(self),
                 state,
             })
-        }
-    }
-
-    fn add_handler(&self, handler: TreeViewHandler) {
-        let mut handlers = self.handlers.borrow_mut();
-        handlers.push(Rc::new(handler));
-    }
-
-    pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {
-        self.add_handler(TreeViewHandler::SelectionChanged(handler));
-    }
-
-    fn for_all_handlers(&self, f: impl Fn(&TreeViewHandler)) {
-        let mut i = 0;
-        loop {
-            let handlers = self.handlers.borrow();
-            if i >= handlers.len() {
-                break;
-            }
-            let h = Rc::clone(&handlers[i]);
-            i += 1;
-            drop(handlers);
-            f(&h);
         }
     }
 }
@@ -419,6 +385,7 @@ fn remove_items_rec(
     }
 }
 
+/*
 struct TreeViewNotifyShim {
     tree: Rc<TreeView>,
 }
@@ -518,3 +485,4 @@ enum TreeViewHandler {
     // Click(EventHandler<ItemActivate>),
     // RClick(EventHandler<ItemActivate>),
 }
+*/

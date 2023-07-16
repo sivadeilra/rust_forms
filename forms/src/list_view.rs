@@ -9,7 +9,6 @@ impl core::ops::Deref for ListView {
 
 pub struct ListView {
     control: ControlState,
-    handlers: RefCell<Vec<Rc<ListViewHandler>>>,
 }
 
 const WC_LISTVIEW: &str = "SysListView32";
@@ -48,13 +47,9 @@ impl ListView {
 
             let state: Rc<ListView> = Rc::new(ListView {
                 control: ControlState::new(hwnd),
-                handlers: RefCell::new(Vec::new()),
             });
             form.invalidate_layout();
 
-            let mut notify_handlers = form.notify_handlers.borrow_mut();
-            let state_rc: Rc<ListView> = Rc::clone(&state);
-            notify_handlers.insert(state.handle().0, NotifyHandler { handler: state_rc });
             state
         }
     }
@@ -332,7 +327,7 @@ impl ListView {
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-setview
-    pub fn set_view(&self, mode: Mode) {
+    pub fn set_mode(&self, mode: Mode) {
         unsafe {
             SendMessageW(
                 self.handle(),
@@ -342,45 +337,9 @@ impl ListView {
             );
         }
     }
-
-    fn add_handler(&self, handler: ListViewHandler) {
-        let mut handlers = self.handlers.borrow_mut();
-        handlers.push(Rc::new(handler));
-    }
-
-    // Events
-    #[cfg(todo)]
-    pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {
-        self.add_handler(ListViewHandler::SelectionChanged(handler));
-    }
-
-    pub fn on_item_activated(&self, handler: EventHandler<ItemActivated>) {
-        self.add_handler(ListViewHandler::ItemActivated(handler));
-    }
-
-    pub fn on_click(&self, handler: EventHandler<ItemActivate>) {
-        self.add_handler(ListViewHandler::Click(handler));
-    }
-
-    pub fn on_rclick(&self, handler: EventHandler<ItemActivate>) {
-        self.add_handler(ListViewHandler::RClick(handler));
-    }
-
-    fn for_all_handlers(&self, f: impl Fn(&ListViewHandler)) {
-        let mut i = 0;
-        loop {
-            let handlers = self.handlers.borrow();
-            if i >= handlers.len() {
-                break;
-            }
-            let h = Rc::clone(&handlers[i]);
-            i += 1;
-            drop(handlers);
-            f(&h);
-        }
-    }
 }
 
+/*
 impl NotifyHandlerTrait for ListView {
     unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult {
         match (*nmhdr).code as i32 {
@@ -417,34 +376,7 @@ impl NotifyHandlerTrait for ListView {
         }
     }
 }
-
-pub struct SetItem<'a> {
-    pub text: Option<&'a str>,
-}
-
-enum ListViewHandler {
-    // SelectionChanged(EventHandler<SelectionChanged>),
-    ItemActivated(EventHandler<ItemActivated>),
-    Click(EventHandler<ItemActivate>),
-    RClick(EventHandler<ItemActivate>),
-}
-
-#[derive(Clone)]
-pub struct ItemActivate {
-    pub item: isize,
-    pub subitem: isize,
-    pub point: POINT,
-}
-
-impl From<&NMITEMACTIVATE> for ItemActivate {
-    fn from(value: &NMITEMACTIVATE) -> Self {
-        Self {
-            item: value.iItem as isize,
-            subitem: value.iSubItem as isize,
-            point: value.ptAction,
-        }
-    }
-}
+*/
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Mode {

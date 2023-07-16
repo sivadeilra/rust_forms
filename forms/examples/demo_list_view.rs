@@ -14,7 +14,7 @@ pub fn main() {
     let lv = ListView::new(&form);
     lv.add_column(0, 120, "Stuff");
     lv.add_column(1, 120, "More Stuff");
-    lv.set_view(Mode::Details);
+    lv.set_mode(Mode::Details);
     lv.insert_item("Hello!");
     lv.insert_item("World!");
 
@@ -63,10 +63,10 @@ pub fn main() {
         let lv = lv.clone();
         form.command_handler(move |control, command| match (control, command) {
             (IDC_MODE_DETAILS, Command::ButtonClicked) => {
-                lv.set_view(Mode::Details);
+                lv.set_mode(Mode::Details);
             }
             (IDC_MODE_ICONS, Command::ButtonClicked) => {
-                lv.set_view(Mode::Icon);
+                lv.set_mode(Mode::Icon);
             }
             (IDC_ADD_ITEM, Command::ButtonClicked) => {
                 let name = format!("item #{}", lv.items_len());

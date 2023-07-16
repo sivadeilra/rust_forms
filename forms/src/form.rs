@@ -24,11 +24,6 @@ pub struct Form {
     layout_min_size: Cell<(i32, i32)>,
 
     pub(crate) layout: RefCell<Option<Layout>>,
-
-    /// Used for event routing.
-    // Key is HWND
-    pub(crate) notify_handlers: RefCell<HashMap<isize, NotifyHandler>>,
-
     pub(crate) default_static_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
     pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
@@ -36,6 +31,7 @@ pub struct Form {
     pub(crate) background_color: Cell<ColorRef>,
 
     command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
+    notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
 
     status_bar: Cell<Option<Rc<StatusBar>>>,
 }
@@ -52,20 +48,6 @@ pub(crate) trait MessageHandlerTrait: 'static {
         let _ = (msg, wparam, lparam);
         LRESULT(0)
     }
-}
-
-pub(crate) struct NotifyHandler {
-    pub(crate) handler: Rc<dyn NotifyHandlerTrait>,
-}
-
-pub(crate) trait NotifyHandlerTrait {
-    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult;
-}
-
-pub(crate) enum NotifyResult {
-    #[allow(dead_code)]
-    Consumed(LRESULT),
-    NotConsumed,
 }
 
 impl Form {
@@ -186,6 +168,17 @@ impl Form {
         assert!(
             result.is_ok(),
             "cannot call command_handler() more than once"
+        );
+    }
+
+    pub fn notify_handler<F>(&self, handler: F)
+    where
+        F: Fn(&Notify) + 'static,
+    {
+        let result = self.notify_handler.set(Box::new(handler));
+        assert!(
+            result.is_ok(),
+            "cannot call notify_handler() more than once"
         );
     }
 }
@@ -505,6 +498,19 @@ extern "system" fn form_wndproc(
             WM_NOTIFY => {
                 let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
+                let notify = Notify::from_nmhdr(nmhdr_ptr);
+
+                if let Some(handler) = state.notify_handler.get() {
+                    handler(&notify);
+                } else {
+                    debug!("no WM_NOTIFY handler installed");
+                }
+            }
+
+            /* old
+            WM_NOTIFY => {
+                let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
+                let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
                 // Look up the control by window handle.
                 let notify_handlers = state.notify_handlers.borrow();
                 if let Some(control) = notify_handlers.get(&hwnd_from.0) {
@@ -520,7 +526,7 @@ extern "system" fn form_wndproc(
                     // return 0;
                 }
             }
-
+            */
             // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
             WM_SIZING => {
                 let (min_width, min_height) = state.layout_min_size.get();

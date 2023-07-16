@@ -11,7 +11,7 @@ pub fn demo_list_view(parent: &Form) {
     lv.set_full_row_select(true);
     lv.add_column(0, 120, "Stuff");
     lv.add_column(1, 120, "More Stuff");
-    lv.set_view(Mode::Details);
+    lv.set_mode(Mode::Details);
 
     form.show_modal_under(Some(parent));
 }
