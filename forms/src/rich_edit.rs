@@ -28,7 +28,7 @@ impl core::ops::Deref for RichEdit {
 }
 
 impl RichEdit {
-    pub fn new(parent: &Rc<Form>) -> Rc<RichEdit> {
+    pub fn new(parent: &ControlState) -> Rc<RichEdit> {
         load_rich_edit_dll();
 
         unsafe {

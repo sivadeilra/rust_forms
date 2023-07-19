@@ -24,6 +24,7 @@ pub struct TabPane {
 impl TabPane {
     pub fn set_layout(&self, layout: Layout) {
         *self.layout.borrow_mut() = Some(layout);
+        self.layout_is_valid.set(false);
     }
 }
 
@@ -47,7 +48,7 @@ impl TabControl {
 
         unsafe {
             let ex_style = WINDOW_EX_STYLE(0);
-            let style = WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE;
+            let style = WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | WS_TABSTOP;
 
             let hwnd = CreateWindowExW(
                 ex_style,
@@ -145,6 +146,13 @@ impl TabControl {
         }
     }
 
+    pub fn select_tab(&self, index: u32) {
+        unsafe {
+            SendMessageW(self.handle(), TCM_SETCURSEL, WPARAM(index as _), LPARAM(0));
+            self.sync_visible();
+        }
+    }
+
     pub fn sync_visible(&self) {
         unsafe {
             debug!("TabControl::sync_visible");
@@ -176,10 +184,10 @@ impl TabControl {
                         if let Some(layout) = &mut *layout {
                             layout.place(
                                 &mut deferred_placer,
-                                client_rect.left,
-                                client_rect.top,
-                                client_rect.right - client_rect.left,
-                                client_rect.bottom - client_rect.top,
+                                0, // client_rect.left,
+                                0, // client_rect.top,
+                                inner_client_rect.right - inner_client_rect.left,
+                                inner_client_rect.bottom - inner_client_rect.top,
                             );
                         }
 
@@ -261,7 +269,7 @@ fn register_class_lazy() -> ATOM {
 }
 
 extern "system" fn tab_wndproc(
-    window: HWND,
+    hwnd: HWND,
     message: u32,
     wparam: WPARAM,
     lparam: LPARAM,
@@ -270,10 +278,16 @@ extern "system" fn tab_wndproc(
 
     unsafe {
         match message {
+            WM_COMMAND | WM_NOTIFY => {
+                // Forward WM_COMMAND and WM_NOTIFY up the window tree.
+                let parent_hwnd = GetParent(hwnd);
+                return SendMessageW(parent_hwnd, message, wparam, lparam);
+            }
+
             _ => {}
         }
 
-        DefWindowProcW(window, message, wparam, lparam)
+        DefWindowProcW(hwnd, message, wparam, lparam)
     }
 }
 
@@ -296,9 +310,15 @@ unsafe extern "system" fn tab_control_subclass_proc(
 
     match message {
         WM_SIZE => {
-            log::debug!("TabControl: WM_SIZE");
             this.sync_visible();
         }
+
+        WM_COMMAND | WM_NOTIFY => {
+            // debug!("got WM_COMMAND / WM_NOTIFY");
+            // let parent_hwnd = GetParent(hwnd);
+            // return SendMessageW(parent_hwnd, message, wparam, lparam);
+        }
+
         _ => {}
     }
 

@@ -17,6 +17,7 @@ pub struct Form {
 
     co_initialized: bool,
 
+    pub(crate) control: OnceCell<ControlState>,
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
 
@@ -49,6 +50,13 @@ pub(crate) trait MessageHandlerTrait: 'static {
     fn handle_message(&self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         let _ = (msg, wparam, lparam);
         LRESULT(0)
+    }
+}
+
+impl std::ops::Deref for Form {
+    type Target = ControlState;
+    fn deref(&self) -> &Self::Target {
+        self.control.get().unwrap()
     }
 }
 
@@ -210,7 +218,7 @@ impl Form {
 
             let mut client_rect: RECT = zeroed();
             if GetClientRect(self.handle.get(), &mut client_rect).into() {
-                debug!(
+                trace!(
                     "running layout, rect: {},{} - {},{}",
                     client_rect.left, client_rect.top, client_rect.right, client_rect.bottom
                 );
@@ -225,7 +233,6 @@ impl Form {
                         layout_height -= sb_height;
                     }
 
-                    debug!("doing placement for tab control");
                     let mut deferred_placer = DeferredLayoutPlacer::new(10);
 
                     layout.place(

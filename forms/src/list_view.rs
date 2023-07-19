@@ -14,15 +14,9 @@ pub struct ListView {
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    pub fn set_visible(&self, value: bool) {
-        let style = self.control.get_window_style();
-        let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { WINDOW_STYLE(0) });
-        self.control.set_window_style(new_style);
-    }
-
-    pub fn new(form: &Rc<Form>) -> Rc<ListView> {
+    pub fn new(parent_control: &ControlState) -> Rc<ListView> {
         unsafe {
-            let parent_window = form.handle();
+            let parent_window = parent_control.handle();
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
             let ex_style = WINDOW_EX_STYLE(0);
@@ -48,7 +42,7 @@ impl ListView {
             let state: Rc<ListView> = Rc::new(ListView {
                 control: ControlState::new(hwnd),
             });
-            form.invalidate_layout();
+            // form.invalidate_layout();
 
             state
         }
@@ -287,6 +281,21 @@ impl ListView {
             lv_item.iSubItem = subitem as i32;
             lv_item.mask = LVIF_TEXT;
             lv_item.pszText = PWSTR(sw.as_ptr() as *mut u16);
+            SendMessageW(
+                self.handle(),
+                LVM_SETITEMTEXTW,
+                WPARAM(item),
+                LPARAM(&lv_item as *const _ as isize),
+            );
+        }
+    }
+
+    pub fn set_subitem_text_wstr(&self, item: usize, subitem: usize, s: &widestring::U16CStr) {
+        unsafe {
+            let mut lv_item: LVITEMW = zeroed();
+            lv_item.iSubItem = subitem as i32;
+            lv_item.mask = LVIF_TEXT;
+            lv_item.pszText = PWSTR(s.as_ptr() as *mut u16);
             SendMessageW(
                 self.handle(),
                 LVM_SETITEMTEXTW,

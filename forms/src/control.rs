@@ -4,7 +4,7 @@ static_assertions::assert_not_impl_any!(ControlState: Send, Sync);
 
 pub struct ControlState {
     pub(crate) stuck: StuckToThread,
-    hwnd: HWND,
+    pub(crate) hwnd: HWND,
 }
 
 impl core::fmt::Debug for ControlState {
@@ -130,6 +130,34 @@ impl ControlState {
         self.set_window_style_flag(WS_VISIBLE, value);
     }
 
+    pub fn show(&self) {
+        unsafe {
+            SetWindowPos(
+                self.hwnd,
+                HWND(0),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW,
+            );
+        }
+    }
+
+    pub fn hide(&self) {
+        unsafe {
+            SetWindowPos(
+                self.hwnd,
+                HWND(0),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOZORDER | SWP_HIDEWINDOW,
+            );
+        }
+    }
+
     pub fn invalidate_all(&self) {
         unsafe {
             InvalidateRect(self.hwnd, None, TRUE);
@@ -182,4 +210,27 @@ commands! {
     wm::BN_DISABLE, ButtonDisable; // 4
     wm::BN_DBLCLK, ButtonDoubleClicked; // 5
     wm::BN_KILLFOCUS, ButtonKillFocus; // 7
+}
+
+#[macro_export]
+macro_rules! count_of {
+    (,) => { 0 };
+    () => { 0 };
+    ($name:ident , $($t:tt)*) => { (1 + $crate::count_of!($($t)*)) };
+}
+
+#[macro_export]
+macro_rules! control_ids {
+    (,) => {};
+    () => {};
+
+    ($name:ident) => {
+        pub const $name: ControlId = ControlId(1);
+    };
+
+    ($name:ident , $($t:tt)*) => {
+        // pub const $name: ControlId = ControlId(count_of!( $($t)* ) + 1);
+        pub const $name: ControlId = ControlId(count_of!( $($t)* ) + 1);
+        control_ids!( $($t)* );
+    }
 }

@@ -92,6 +92,7 @@ impl<'a> FormBuilder<'a> {
             let form_alloc: Rc<Form> = Rc::new(Form {
                 co_initialized,
                 stuck: StuckToThread::new(),
+                control: Default::default(),
                 handle: Cell::new(HWND(0)),
                 quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
@@ -182,6 +183,7 @@ impl<'a> FormBuilder<'a> {
             }
 
             // Store the window handle, now that we know it, in the FormState.
+            form_alloc.control.set(ControlState::new(handle)).unwrap();
             form_alloc.handle.set(handle);
 
             if let Ok(br) = Brush::from_sys_color(SysColor::Window) {
