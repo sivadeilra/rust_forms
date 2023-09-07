@@ -1,53 +1,20 @@
 use forms::custom::CustomControl;
 use forms::*;
-use log::debug;
-use windows::Win32::Foundation::{RECT, COLORREF};
-use windows::Win32::Graphics::Gdi::{GetStockObject, CreateSolidBrush};
+use std::cell::Cell;
 
-struct MyStuff {
-    x: u32,
-}
-
-impl custom::CustomInner for MyStuff {
-    fn paint(&self, dc: &gdi::dc::Dc, _rect: &RECT) {
-
-        dc.begin_path();
-        dc.move_to(10, 10);
-        dc.line_to(20, 10);
-        dc.line_to(20, 20);
-        dc.end_path();
-        dc.set_pen_color(ColorRef::BLUE);
-        dc.stroke_path();
-
-        dc.begin_path();
-        dc.move_to(50, 50);
-        dc.line_to(50, 80);
-        dc.line_to(80, 80);
-        dc.close_figure();
-        dc.end_path();
-        dc.set_pen_color(ColorRef::GREEN);
-        dc.stroke_path();
-
-        let hbrush =
-        unsafe {
-            CreateSolidBrush(COLORREF(0xee_ee_ee_ee))
-        };
-        dc.select_object(hbrush.0);
-        dc.fill_path();
-
-        dc.text_out_a(20, 20, "what up".as_bytes());
-    }
-}
 
 pub fn main() {
-    env_logger::builder().format_timestamp(None).init();
-
     let form = Form::builder()
         .size(1024, 768)
         .text("Custom Control Demo")
         .build();
 
-    let custom = CustomControl::new(&form, MyStuff { x: 42 });
+    let custom = CustomControl::new(
+        &form,
+        MyStuff {
+            mouse_pos: Default::default(),
+        },
+    );
 
     form.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis::new().auto(),
@@ -55,15 +22,41 @@ pub fn main() {
         items: vec![GridItem::control(0, 0, custom.clone())],
     }));
 
-    {
-        form.command_handler(move |control, command| match (control, command) {
-            _ => {}
-        });
+    form.show_modal();
+}
+
+struct MyStuff {
+    mouse_pos: Cell<Option<POINT>>,
+}
+
+impl custom::CustomInner for MyStuff {
+    fn paint(&self, _control: &CustomControl<Self>, dc: &gdi::dc::Dc, _rect: &Rect) {
+        dc.text_out_a(20, 20, "what up".as_bytes());
+
+        if let Some(pos) = self.mouse_pos.get() {
+            dc.begin_path();
+            dc.move_to(pos.x, pos.y - 50);
+            dc.line_to(pos.x + 50, pos.y);
+            dc.line_to(pos.x, pos.y + 50);
+            dc.line_to(pos.x - 50, pos.y);
+            dc.close_figure();
+            dc.end_path();
+            dc.set_pen_color(ColorRef::GREEN);
+            dc.stroke_path();
+
+            let msg = format!("{}, {}", pos.x, pos.y);
+            dc.text_out_a(pos.x - 20, pos.y - 15, msg.as_bytes());
+        }
     }
 
-    form.notify_handler(move |_notify: &Notify| {
-        // ...
-    });
+    fn mouse_move(&self, control: &CustomControl<Self>, pt: POINT) {
+        self.mouse_pos.set(Some(pt));
+        control.invalidate_all();
+    }
 
-    form.show_modal();
+    fn mouse_leave(&self, control: &CustomControl<Self>) {
+        println!("mouse_leave");
+        self.mouse_pos.set(None);
+        control.invalidate_all();
+    }
 }

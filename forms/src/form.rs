@@ -25,9 +25,7 @@ pub struct Form {
     layout_min_size: Cell<(i32, i32)>,
 
     pub(crate) layout: RefCell<Option<Layout>>,
-    pub(crate) default_static_font: Cell<Option<Rc<Font>>>,
-    pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
-    pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
+    pub(crate) style: Rc<Style>,
     pub(crate) background_brush: Cell<Option<Brush>>,
     pub(crate) background_color: Cell<ColorRef>,
 
@@ -83,34 +81,8 @@ impl Form {
         set_window_text(self.handle.get(), text);
     }
 
-    pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
-        self.stuck.check();
-        self.default_edit_font.set(font);
-    }
-
-    pub fn get_default_edit_font(&self) -> Option<Rc<Font>> {
-        self.stuck.check();
-        clone_cell_opt_rc(&self.default_edit_font)
-    }
-
-    pub fn set_default_static_font(&self, font: Option<Rc<Font>>) {
-        self.stuck.check();
-        self.default_static_font.set(font);
-    }
-
-    pub fn get_default_static_font(&self) -> Option<Rc<Font>> {
-        self.stuck.check();
-        clone_cell_opt_rc(&self.default_static_font)
-    }
-
-    pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
-        self.stuck.check();
-        self.default_button_font.set(font);
-    }
-
-    pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
-        self.stuck.check();
-        clone_cell_opt_rc(&self.default_button_font)
+    pub fn style(&self) -> &Style {
+        &self.style
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
@@ -160,7 +132,6 @@ impl Form {
                 WPARAM(font.hfont.0 as usize),
                 LPARAM(1),
             );
-            // self.font.set(Some(font));
         }
     }
 
@@ -339,7 +310,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.hInstance = instance;
         class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
-        class_ex.hbrBackground = HBRUSH((COLOR_WINDOW.0 + 1) as _);
+        class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
         class_ex.lpfnWndProc = Some(form_wndproc);
         class_ex.hCursor = LoadCursorW(HMODULE(0), IDC_ARROW).unwrap();
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
@@ -473,26 +444,6 @@ extern "system" fn form_wndproc(
                 }
             }
 
-            /* old
-            WM_NOTIFY => {
-                let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
-                let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
-                // Look up the control by window handle.
-                let notify_handlers = state.notify_handlers.borrow();
-                if let Some(control) = notify_handlers.get(&hwnd_from.0) {
-                    // Clone the Rc.
-                    let cloned_control = control.handler.clone();
-                    drop(notify_handlers); // drop dynamic borrow
-                    match cloned_control.wm_notify(wparam, nmhdr_ptr) {
-                        NotifyResult::NotConsumed => {}
-                        NotifyResult::Consumed(result) => return result,
-                    }
-                } else {
-                    debug!("WM_NOTIFY: received notification for unknown control window");
-                    // return 0;
-                }
-            }
-            */
             // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
             WM_SIZING => {
                 let (min_width, min_height) = state.layout_min_size.get();

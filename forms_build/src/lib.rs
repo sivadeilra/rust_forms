@@ -1,3 +1,5 @@
+/// Call this function from your app's `build.rs` script. This is necessary for getting styled
+/// (modern) controls on Windows.
 pub fn add_manifest() {
     println!("cargo:rustc-link-arg=/manifest:embed");
     println!(

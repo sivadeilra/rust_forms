@@ -27,7 +27,7 @@ pub enum Msg<'a> {
 }
 
 impl<'a> Msg<'a> {
-    pub unsafe fn parse(raw: &'a mut MSG) -> Self {
+    pub fn parse(raw: &'a mut MSG) -> Self {
         use windows::Win32::UI::WindowsAndMessaging as wm;
 
         match raw.message {

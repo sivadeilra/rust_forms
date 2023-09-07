@@ -159,7 +159,7 @@ impl TabControl {
 
             let client_rect = self.get_client_rect();
 
-            let mut inner_client_rect = client_rect.clone();
+            let mut inner_client_rect = client_rect;
             SendMessageW(
                 self.handle(),
                 TCM_ADJUSTRECT,
@@ -179,7 +179,7 @@ impl TabControl {
                 let mut deferred_placer = DeferredLayoutPlacer::new(50);
 
                 if show_it {
-                    if !tab.pane.layout_is_valid.get() || true {
+                    if !tab.pane.layout_is_valid.get() {
                         let mut layout = tab.pane.layout.borrow_mut();
                         if let Some(layout) = &mut *layout {
                             layout.place(
@@ -301,10 +301,6 @@ unsafe extern "system" fn tab_control_subclass_proc(
 ) -> LRESULT {
     assert!(!ref_data != 0);
     let this: &TabControl = &*(ref_data as *const TabControl);
-
-    match message {
-        _ => {}
-    }
 
     let result = DefSubclassProc(hwnd, message, wparam, lparam);
 

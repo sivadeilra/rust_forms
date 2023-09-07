@@ -2,7 +2,6 @@ use super::*;
 
 pub struct Label {
     control: ControlState,
-    // font: Option<Rc<Font>>,
 }
 
 impl core::ops::Deref for Label {
@@ -43,9 +42,7 @@ impl Label {
                 control: ControlState::new(hwnd),
             };
 
-            if let Some(f) = form.get_default_static_font() {
-                this.set_font(f);
-            }
+            this.set_font(&form.style.static_font);
 
             Rc::new(this)
         }
@@ -55,7 +52,7 @@ impl Label {
         set_window_text(self.control.handle(), text);
     }
 
-    pub fn set_font(&self, font: Rc<Font>) {
+    pub fn set_font(&self, font: &Font) {
         unsafe {
             SendMessageW(
                 self.handle(),
@@ -63,7 +60,6 @@ impl Label {
                 WPARAM(font.hfont.0 as usize),
                 LPARAM(1),
             );
-            // self.font.set(Some(font));
         }
     }
 }

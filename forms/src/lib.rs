@@ -1,10 +1,14 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![allow(clippy::needless_late_init)]
+#![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::let_unit_value)]
 #![allow(clippy::single_match)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::collapsible_else_if)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::comparison_chain)]
 
 mod app;
 mod brush;
@@ -31,6 +35,7 @@ mod msg;
 mod notify;
 mod rich_edit;
 mod status_bar;
+mod style;
 mod system_params;
 mod tab;
 pub mod tree_view;
@@ -57,6 +62,7 @@ pub use notify::*;
 pub use rich_edit::RichEdit;
 pub use rich_edit::*;
 pub use status_bar::*;
+pub use style::*;
 pub use tab::*;
 pub use tree_view::{TreeNode, TreeView, TreeViewOptions};
 pub use windows::Win32::Foundation::RECTL as Rect;
@@ -128,6 +134,7 @@ const STAP_ALLOW_WEBCONTENT: u32 = 1 << 2;
 
 pub(crate) const WM_NOTIFY: u32 = 0x004E;
 
+#[allow(dead_code)]
 fn clone_cell_opt_rc<T>(rc: &Cell<Option<Rc<T>>>) -> Option<Rc<T>> {
     let value = rc.take();
     let result = value.clone();
@@ -231,5 +238,25 @@ impl StuckToThread {
                 "Expected this object to be used only on the thread that created it."
             );
         }
+    }
+}
+
+#[inline(always)]
+fn get_x_lparam(lparam: LPARAM) -> i16 {
+    lparam.0 as i16
+}
+
+#[inline(always)]
+fn get_y_lparam(lparam: LPARAM) -> i16 {
+    ((lparam.0 as u32) >> 16) as i16
+}
+
+#[inline(always)]
+fn rect_to_rectl(r: &RECT) -> RECTL {
+    RECTL {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
     }
 }

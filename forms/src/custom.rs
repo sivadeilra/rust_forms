@@ -1,6 +1,6 @@
 use super::*;
-use core::mem::MaybeUninit;
 use crate::gdi::dc::Dc;
+use core::mem::MaybeUninit;
 use std::sync::Once;
 use windows::w;
 
@@ -65,9 +65,9 @@ where
                 400, // width
                 400, // height
                 parent.handle(),
-                HMENU(0), // hmenu
-                None,     // instance
-                Some(bouncer_ptr as *const _),     // lpparam
+                HMENU(0),                      // hmenu
+                None,                          // instance
+                Some(bouncer_ptr as *const _), // lpparam
             );
 
             if hwnd.0 == 0 {
@@ -84,8 +84,10 @@ where
     }
 }
 
-pub trait CustomInner {
-    fn paint(&self, dc: &Dc, rect: &RECT);
+pub trait CustomInner: Sized {
+    fn paint(&self, control: &CustomControl<Self>, dc: &Dc, rect: &Rect) {}
+    fn mouse_move(&self, control: &CustomControl<Self>, pt: POINT) {}
+    fn mouse_leave(&self, control: &CustomControl<Self>) {}
 }
 
 static REGISTER_CLASS_ONCE: Once = Once::new();
@@ -134,7 +136,6 @@ unsafe extern "system" fn custom_wndproc(
         _ => {}
     }
 
-
     let bouncer_ptr: isize = GetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0));
     if bouncer_ptr == 0 {
         // debug!("custom_wndproc: message 0x{message:04x} - no bouncer");
@@ -169,9 +170,19 @@ where
 
                     let dc = Dc { hdc: paint.hdc };
 
-                    self.inner.paint(&dc, &paint.rcPaint);
+                    self.inner.paint(self, &dc, &rect_to_rectl(&paint.rcPaint));
 
                     EndPaint(hwnd, &paint);
+                }
+
+                WM_MOUSEMOVE => {
+                    let x = get_x_lparam(lparam) as i32;
+                    let y = get_y_lparam(lparam) as i32;
+                    self.inner.mouse_move(self, POINT { x, y });
+                }
+
+                WM_MOUSELEAVE => {
+                    self.inner.mouse_leave(self);
                 }
 
                 _ => {}

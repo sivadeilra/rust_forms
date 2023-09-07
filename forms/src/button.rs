@@ -4,7 +4,6 @@ use super::*;
 
 pub struct Button {
     control: ControlState,
-    font: Cell<Option<Rc<Font>>>,
 }
 
 impl core::ops::Deref for Button {
@@ -140,16 +139,17 @@ impl Button {
 
             let this = Rc::new(Button {
                 control: ControlState::new(hwnd),
-                font: Default::default(),
             });
 
-            if let Some(font) = form.get_default_button_font() {
-                this.set_font(font);
-            }
+            this.set_font(&form.style().button_font);
 
             if let Some(text) = &builder.text {
                 this.set_text(text);
             }
+
+            // let hbr = GetSysColorBrush(SYS_COLOR_INDEX(COLOR_BACKGROUND.0 + 1));
+            let hbr = CreateSolidBrush(COLORREF(0xe0_ff_00_ff));
+            SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, hbr.0 as _);
 
             this
         }
@@ -161,7 +161,7 @@ impl Button {
         }
     }
 
-    pub fn set_font(&self, font: Rc<Font>) {
+    pub fn set_font(&self, font: &Font) {
         unsafe {
             SendMessageW(
                 self.control.handle(),
@@ -169,7 +169,6 @@ impl Button {
                 WPARAM(font.hfont.0 as usize),
                 LPARAM(1),
             );
-            self.font.set(Some(font));
         }
     }
 

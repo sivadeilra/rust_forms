@@ -1,3 +1,5 @@
+use windows::w;
+
 use super::*;
 use core::any::Any;
 
@@ -82,6 +84,8 @@ impl TreeView {
             if hwnd.0 == 0 {
                 panic!("failed to create TreeView window");
             }
+
+            // let _ = windows::Win32::UI::Controls::SetWindowTheme(hwnd, w!("EXPLORER"), PCWSTR::null());
 
             form.invalidate_layout();
 
