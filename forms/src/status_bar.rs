@@ -36,20 +36,31 @@ impl StatusBar {
             }
 
             let state: Rc<StatusBar> = Rc::new(StatusBar {
-                control: ControlState::new(form, hwnd),
+                control: ControlState::new(hwnd),
             });
+
+            SendMessageW(
+                state.handle(),
+                SB_SIMPLE,
+                WPARAM(1), // set it to simple mode.
+                LPARAM(0),
+            );
+
             form.invalidate_layout();
             state
         }
     }
 
     pub fn set_status(&self, s: &str) {
-        set_window_text(self.handle(), s);
-    }
-}
+        unsafe {
+            let ws = U16CString::from_str_truncate(s);
 
-impl NotifyHandlerTrait for StatusBar {
-    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult {
-        NotifyResult::NotConsumed
+            SendMessageW(
+                self.handle(),
+                SB_SETTEXT,
+                WPARAM(SB_SIMPLEID as _),
+                LPARAM(ws.as_ptr() as _),
+            );
+        }
     }
 }

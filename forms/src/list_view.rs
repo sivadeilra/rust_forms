@@ -9,21 +9,14 @@ impl core::ops::Deref for ListView {
 
 pub struct ListView {
     control: ControlState,
-    handlers: RefCell<Vec<Rc<ListViewHandler>>>,
 }
 
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    pub fn set_visible(&self, value: bool) {
-        let style = self.control.get_window_style();
-        let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { WINDOW_STYLE(0) });
-        self.control.set_window_style(new_style);
-    }
-
-    pub fn new(form: &Rc<Form>) -> Rc<ListView> {
+    pub fn new(parent_control: &ControlState) -> Rc<ListView> {
         unsafe {
-            let parent_window = form.handle();
+            let parent_window = parent_control.handle();
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
             let ex_style = WINDOW_EX_STYLE(0);
@@ -47,14 +40,10 @@ impl ListView {
             }
 
             let state: Rc<ListView> = Rc::new(ListView {
-                control: ControlState::new(form, hwnd),
-                handlers: RefCell::new(Vec::new()),
+                control: ControlState::new(hwnd),
             });
-            form.invalidate_layout();
+            // form.invalidate_layout();
 
-            let mut notify_handlers = form.notify_handlers.borrow_mut();
-            let state_rc: Rc<ListView> = Rc::clone(&state);
-            notify_handlers.insert(state.handle().0, NotifyHandler { handler: state_rc });
             state
         }
     }
@@ -153,8 +142,16 @@ impl ListView {
         self.set_ex_style(mask, if value { mask } else { 0 });
     }
 
+    fn get_ex_style_bool(&self, mask: u32) -> bool {
+        self.get_ex_style().0 & mask != 0
+    }
+
     pub fn set_full_row_select(&self, value: bool) {
         self.set_ex_style_bool(LVS_EX_FULLROWSELECT, value);
+    }
+
+    pub fn get_full_row_select(&self) -> bool {
+        self.get_ex_style_bool(LVS_EX_FULLROWSELECT)
     }
 
     pub fn set_check_boxes(&self, value: bool) {
@@ -293,6 +290,21 @@ impl ListView {
         }
     }
 
+    pub fn set_subitem_text_wstr(&self, item: usize, subitem: usize, s: &widestring::U16CStr) {
+        unsafe {
+            let mut lv_item: LVITEMW = zeroed();
+            lv_item.iSubItem = subitem as i32;
+            lv_item.mask = LVIF_TEXT;
+            lv_item.pszText = PWSTR(s.as_ptr() as *mut u16);
+            SendMessageW(
+                self.handle(),
+                LVM_SETITEMTEXTW,
+                WPARAM(item),
+                LPARAM(&lv_item as *const _ as isize),
+            );
+        }
+    }
+
     pub fn set_item_text(&self, item: usize, s: &str) {
         self.set_subitem_text(item, 0, s);
     }
@@ -324,7 +336,7 @@ impl ListView {
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/lvm-setview
-    pub fn set_view(&self, mode: Mode) {
+    pub fn set_mode(&self, mode: Mode) {
         unsafe {
             SendMessageW(
                 self.handle(),
@@ -334,45 +346,9 @@ impl ListView {
             );
         }
     }
-
-    fn add_handler(&self, handler: ListViewHandler) {
-        let mut handlers = self.handlers.borrow_mut();
-        handlers.push(Rc::new(handler));
-    }
-
-    // Events
-    #[cfg(todo)]
-    pub fn on_selection_changed(&self, handler: EventHandler<SelectionChanged>) {
-        self.add_handler(ListViewHandler::SelectionChanged(handler));
-    }
-
-    pub fn on_item_activated(&self, handler: EventHandler<ItemActivated>) {
-        self.add_handler(ListViewHandler::ItemActivated(handler));
-    }
-
-    pub fn on_click(&self, handler: EventHandler<ItemActivate>) {
-        self.add_handler(ListViewHandler::Click(handler));
-    }
-
-    pub fn on_rclick(&self, handler: EventHandler<ItemActivate>) {
-        self.add_handler(ListViewHandler::RClick(handler));
-    }
-
-    fn for_all_handlers(&self, f: impl Fn(&ListViewHandler)) {
-        let mut i = 0;
-        loop {
-            let handlers = self.handlers.borrow();
-            if i >= handlers.len() {
-                break;
-            }
-            let h = Rc::clone(&handlers[i]);
-            i += 1;
-            drop(handlers);
-            f(&h);
-        }
-    }
 }
 
+/*
 impl NotifyHandlerTrait for ListView {
     unsafe fn wm_notify(&self, _control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult {
         match (*nmhdr).code as i32 {
@@ -409,34 +385,7 @@ impl NotifyHandlerTrait for ListView {
         }
     }
 }
-
-pub struct SetItem<'a> {
-    pub text: Option<&'a str>,
-}
-
-enum ListViewHandler {
-    // SelectionChanged(EventHandler<SelectionChanged>),
-    ItemActivated(EventHandler<ItemActivated>),
-    Click(EventHandler<ItemActivate>),
-    RClick(EventHandler<ItemActivate>),
-}
-
-#[derive(Clone)]
-pub struct ItemActivate {
-    pub item: isize,
-    pub subitem: isize,
-    pub point: POINT,
-}
-
-impl From<&NMITEMACTIVATE> for ItemActivate {
-    fn from(value: &NMITEMACTIVATE) -> Self {
-        Self {
-            item: value.iItem as isize,
-            subitem: value.iSubItem as isize,
-            point: value.ptAction,
-        }
-    }
-}
+*/
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Mode {

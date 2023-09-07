@@ -2,7 +2,6 @@ use super::*;
 
 pub struct Label {
     control: ControlState,
-    // font: Option<Rc<Font>>,
 }
 
 impl core::ops::Deref for Label {
@@ -39,13 +38,28 @@ impl Label {
                 panic!("failed to create control window");
             }
 
-            Rc::new(Label {
-                control: ControlState::new(form, hwnd),
-            })
+            let this = Label {
+                control: ControlState::new(hwnd),
+            };
+
+            this.set_font(&form.style.static_font);
+
+            Rc::new(this)
         }
     }
 
     pub fn set_text(&self, text: &str) {
         set_window_text(self.control.handle(), text);
+    }
+
+    pub fn set_font(&self, font: &Font) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
+        }
     }
 }

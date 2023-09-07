@@ -1,17 +1,28 @@
 use super::*;
+use windows::w;
 
 pub struct FormBuilder<'a> {
+    args: Box<FormArgs<'a>>,
+}
+
+struct FormArgs<'a> {
     text: Option<&'a str>,
     size: Option<(i32, i32)>,
+    parent: Option<&'a Form>,
     quit_on_close: Option<i32>,
+    style: Option<Rc<Style>>,
 }
 
 impl<'a> Default for FormBuilder<'a> {
     fn default() -> Self {
         Self {
-            text: None,
-            size: None,
-            quit_on_close: Some(0),
+            args: Box::new(FormArgs {
+                text: None,
+                size: None,
+                parent: None,
+                quit_on_close: Some(0),
+                style: None,
+            }),
         }
     }
 }
@@ -21,33 +32,49 @@ impl<'a> FormBuilder<'a> {
         Self::default()
     }
 
+    pub fn parent(&mut self, parent: &'a Form) -> &mut Self {
+        self.args.parent = Some(parent);
+        self
+    }
+
     pub fn text(&mut self, text: &'a str) -> &mut Self {
-        self.text = Some(text);
+        self.args.text = Some(text);
         self
     }
 
     pub fn size(&mut self, w: i32, h: i32) -> &mut Self {
-        self.size = Some((w, h));
+        self.args.size = Some((w, h));
         self
     }
 
     pub fn quit_on_close(&mut self) -> &mut Self {
-        self.quit_on_close = Some(0);
+        self.args.quit_on_close = Some(0);
         self
     }
 
     pub fn quit_on_close_with(&mut self, exit_code: i32) -> &mut Self {
-        self.quit_on_close = Some(exit_code);
+        self.args.quit_on_close = Some(exit_code);
         self
     }
 
     pub fn no_quit_on_close(&mut self) -> &mut Self {
-        self.quit_on_close = None;
+        self.args.quit_on_close = None;
         self
     }
 
-    pub fn build(&self) -> Rc<Form> {
-        init_common_controls();
+    pub fn style(&mut self, style: Rc<Style>) -> &mut Self {
+        self.args.style = Some(style);
+        self
+    }
+
+    pub fn build(&mut self) -> Rc<Form> {
+        crate::init::init_common_controls();
+
+        let style = if let Some(s) = self.args.style.take() {
+            s
+        } else {
+            Rc::new(Style::default())
+        };
 
         unsafe {
             let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
@@ -68,7 +95,7 @@ impl<'a> FormBuilder<'a> {
 
             let window_name_wstr: U16CString;
             let mut window_name_pwstr = PCWSTR::null();
-            if let Some(text) = self.text {
+            if let Some(text) = self.args.text {
                 window_name_wstr = U16CString::from_str(text).unwrap();
                 window_name_pwstr = PCWSTR::from_raw(window_name_wstr.as_ptr());
             }
@@ -76,7 +103,7 @@ impl<'a> FormBuilder<'a> {
             let mut width = CW_USEDEFAULT;
             let mut height = CW_USEDEFAULT;
 
-            if let Some((w, h)) = self.size {
+            if let Some((w, h)) = self.args.size {
                 width = w;
                 height = h;
             }
@@ -84,21 +111,28 @@ impl<'a> FormBuilder<'a> {
             let form_alloc: Rc<Form> = Rc::new(Form {
                 co_initialized,
                 stuck: StuckToThread::new(),
+                control: Default::default(),
                 handle: Cell::new(HWND(0)),
-                quit_on_close: self.quit_on_close,
+                quit_on_close: self.args.quit_on_close,
                 is_layout_valid: Cell::new(false),
-                notify_handlers: RefCell::new(HashMap::new()),
-                event_handlers: RefCell::new(HashMap::new()),
-                default_edit_font: Default::default(),
-                default_button_font: Default::default(),
                 layout: RefCell::new(None),
                 layout_min_size: Cell::new((0, 0)),
                 background_brush: Default::default(),
                 background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
                 status_bar: Cell::new(None),
+                command_handler: Default::default(),
+                notify_handler: Default::default(),
+                tab_controls: Default::default(),
+                style,
             });
 
             let form_alloc_ptr: *const Form = &*form_alloc;
+
+            let parent_window_handle: HWND = if let Some(parent) = self.args.parent {
+                parent.handle()
+            } else {
+                HWND(0)
+            };
 
             let handle = CreateWindowExW(
                 ex_style,
@@ -109,7 +143,7 @@ impl<'a> FormBuilder<'a> {
                 CW_USEDEFAULT,
                 width,
                 height,
-                None,
+                parent_window_handle,
                 None,
                 instance,
                 Some(form_alloc_ptr as *const c_void as *mut c_void),
@@ -119,7 +153,8 @@ impl<'a> FormBuilder<'a> {
                 panic!("Failed to create window");
             }
 
-            let _ = SetWindowTheme(handle, PCWSTR::null(), PCWSTR::null());
+            // let _ = SetWindowTheme(handle, w!("EXPLORER"), PCWSTR::null());
+            // let _ = SetWindowTheme(handle, w!("Window"), PCWSTR::null());
 
             let button_string = U16CString::from_str_truncate("BUTTON");
             let htheme = OpenThemeData(handle, PCWSTR::from_raw(button_string.as_ptr()));
@@ -145,7 +180,28 @@ impl<'a> FormBuilder<'a> {
 
             let htheme = GetWindowTheme(handle);
 
+            let mut logfont: LOGFONTW = zeroed();
+            match GetThemeSysFont(htheme, TMT_STATUSFONT, &mut logfont) {
+                Ok(f) => {
+                    debug!(
+                        "GetThemeFont succeeded: {}",
+                        U16CString::from_ptr_str(logfont.lfFaceName.as_ptr()).to_string_lossy()
+                    );
+                    match Font::from_logfont(&logfont) {
+                        Ok(f) => {
+                            // form_alloc.default_static_font.set(Some(Rc::new(f)));
+                        }
+                        Err(_e) => {}
+                    }
+                    // Font::new(font_family, height)
+                }
+                Err(e) => {
+                    warn!("GetThemeFont: {}", e);
+                }
+            }
+
             // Store the window handle, now that we know it, in the FormState.
+            form_alloc.control.set(ControlState::new(handle)).unwrap();
             form_alloc.handle.set(handle);
 
             if let Ok(br) = Brush::from_sys_color(SysColor::Window) {
@@ -153,6 +209,16 @@ impl<'a> FormBuilder<'a> {
             }
 
             SendMessageW(handle, WM_THEMECHANGED, WPARAM(0), LPARAM(0));
+
+            /*
+            match Font::new("Arial", 10) {
+                Ok(font) => {
+                    debug!("setting font");
+                    form_alloc.default_static_font.set(Some(font));
+                }
+                Err(_e) => {}
+            }
+            */
 
             form_alloc
         }

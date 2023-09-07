@@ -7,7 +7,9 @@ use core::mem::MaybeUninit;
 use std::collections::VecDeque;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
+use std::sync::Once;
 use std::sync::{Arc, Mutex};
+use windows::w;
 use windows::Win32::System::Threading::{QueueUserWorkItem, WORKER_THREAD_FLAGS};
 
 #[derive(Clone)]
@@ -40,16 +42,15 @@ impl Messenger {
             // Create the messaging window.
             let window_class_atom = register_class_lazy();
             let instance = get_instance();
-            let window_name: [u16; 2] = [0; 2];
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 PCWSTR::from_raw(window_class_atom as usize as *const u16),
-                PCWSTR::from_raw(window_name.as_ptr()), // window name
-                WINDOW_STYLE(0),                        // style
-                0,                                      // x
-                0,                                      // y
-                1,                                      // width
-                1,                                      // height
+                w!("event messenger"), // window name
+                WINDOW_STYLE(0),       // style
+                0,                     // x
+                0,                     // y
+                1,                     // width
+                1,                     // height
                 Some(&HWND_MESSAGE),
                 None,
                 instance,

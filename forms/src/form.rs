@@ -1,7 +1,9 @@
 use super::*;
+use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
 use log::debug;
+use std::cell::OnceCell;
 use std::sync::Once;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 
@@ -15,6 +17,7 @@ pub struct Form {
 
     co_initialized: bool,
 
+    pub(crate) control: OnceCell<ControlState>,
     pub(crate) handle: Cell<HWND>,
     quit_on_close: Option<i32>,
 
@@ -22,20 +25,16 @@ pub struct Form {
     layout_min_size: Cell<(i32, i32)>,
 
     pub(crate) layout: RefCell<Option<Layout>>,
-
-    /// Used for event routing.
-    // Key is HWND
-    pub(crate) notify_handlers: RefCell<HashMap<isize, NotifyHandler>>,
-
-    /// Key is HWND
-    pub(crate) event_handlers: RefCell<HashMap<isize, Rc<dyn MessageHandlerTrait>>>,
-
-    pub(crate) default_edit_font: Cell<Option<Rc<Font>>>,
-    pub(crate) default_button_font: Cell<Option<Rc<Font>>>,
+    pub(crate) style: Rc<Style>,
     pub(crate) background_brush: Cell<Option<Brush>>,
     pub(crate) background_color: Cell<ColorRef>,
 
+    command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
+    notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
+
     status_bar: Cell<Option<Rc<StatusBar>>>,
+
+    pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControl>>>,
 }
 
 assert_not_impl_any!(Form: Send, Sync);
@@ -52,18 +51,11 @@ pub(crate) trait MessageHandlerTrait: 'static {
     }
 }
 
-pub(crate) struct NotifyHandler {
-    pub(crate) handler: Rc<dyn NotifyHandlerTrait>,
-}
-
-pub(crate) trait NotifyHandlerTrait {
-    unsafe fn wm_notify(&self, control_id: WPARAM, nmhdr: *mut NMHDR) -> NotifyResult;
-}
-
-pub(crate) enum NotifyResult {
-    #[allow(dead_code)]
-    Consumed(LRESULT),
-    NotConsumed,
+impl std::ops::Deref for Form {
+    type Target = ControlState;
+    fn deref(&self) -> &Self::Target {
+        self.control.get().unwrap()
+    }
 }
 
 impl Form {
@@ -89,24 +81,8 @@ impl Form {
         set_window_text(self.handle.get(), text);
     }
 
-    pub fn set_default_edit_font(&self, font: Option<Rc<Font>>) {
-        self.stuck.check();
-        self.default_edit_font.set(font);
-    }
-
-    pub fn get_default_edit_font(&self) -> Option<Rc<Font>> {
-        self.stuck.check();
-        clone_cell_opt_rc(&self.default_edit_font)
-    }
-
-    pub fn set_default_button_font(&self, font: Option<Rc<Font>>) {
-        self.stuck.check();
-        self.default_button_font.set(font);
-    }
-
-    pub fn get_default_button_font(&self) -> Option<Rc<Font>> {
-        self.stuck.check();
-        clone_cell_opt_rc(&self.default_button_font)
+    pub fn style(&self) -> &Style {
+        &self.style
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
@@ -147,6 +123,45 @@ impl Form {
             None
         }
     }
+
+    pub fn set_font(&self, font: Rc<Font>) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                WM_SETFONT,
+                WPARAM(font.hfont.0 as usize),
+                LPARAM(1),
+            );
+        }
+    }
+
+    pub fn enable(&self, value: bool) {
+        unsafe {
+            EnableWindow(self.handle(), BOOL(value as i32));
+        }
+    }
+
+    pub fn command_handler<F>(&self, handler: F)
+    where
+        F: Fn(ControlId, Command) + 'static,
+    {
+        let result = self.command_handler.set(Box::new(handler));
+        assert!(
+            result.is_ok(),
+            "cannot call command_handler() more than once"
+        );
+    }
+
+    pub fn notify_handler<F>(&self, handler: F)
+    where
+        F: Fn(&Notify) + 'static,
+    {
+        let result = self.notify_handler.set(Box::new(handler));
+        assert!(
+            result.is_ok(),
+            "cannot call notify_handler() more than once"
+        );
+    }
 }
 
 impl Form {
@@ -174,7 +189,7 @@ impl Form {
 
             let mut client_rect: RECT = zeroed();
             if GetClientRect(self.handle.get(), &mut client_rect).into() {
-                debug!(
+                trace!(
                     "running layout, rect: {},{} - {},{}",
                     client_rect.left, client_rect.top, client_rect.right, client_rect.bottom
                 );
@@ -189,34 +204,7 @@ impl Form {
                         layout_height -= sb_height;
                     }
 
-                    struct DeferredLayoutPlacer {
-                        op: DeferWindowPosOp,
-                    }
-
-                    impl LayoutPlacer for DeferredLayoutPlacer {
-                        fn place_control(
-                            &mut self,
-                            control: &ControlState,
-                            x: i32,
-                            y: i32,
-                            width: i32,
-                            height: i32,
-                        ) {
-                            self.op.defer(
-                                control.handle(),
-                                HWND(0),
-                                x,
-                                y,
-                                width,
-                                height,
-                                SWP_NOZORDER,
-                            );
-                        }
-                    }
-
-                    let mut deferred_placer = DeferredLayoutPlacer {
-                        op: DeferWindowPosOp::begin(10).unwrap(),
-                    };
+                    let mut deferred_placer = DeferredLayoutPlacer::new(10);
 
                     layout.place(
                         &mut deferred_placer,
@@ -247,9 +235,25 @@ impl Form {
 
 impl Form {
     pub fn show_modal(&self) {
+        self.show_modal_under(None)
+    }
+
+    pub fn show_modal_under(&self, parent: Option<&Form>) {
         self.stuck.check();
+
+        let disabler: Option<DisabledFormScope> = if let Some(p) = parent {
+            unsafe {
+                EnableWindow(p.handle(), BOOL(0));
+            }
+            Some(DisabledFormScope { form: p.handle() })
+        } else {
+            None
+        };
+
         self.show_window();
         self.event_loop();
+
+        drop(disabler);
     }
 
     fn event_loop(&self) {
@@ -278,6 +282,18 @@ impl Form {
     }
 }
 
+struct DisabledFormScope {
+    pub(crate) form: HWND,
+}
+
+impl Drop for DisabledFormScope {
+    fn drop(&mut self) {
+        unsafe {
+            EnableWindow(self.form, BOOL(1));
+        }
+    }
+}
+
 static REGISTER_CLASS_ONCE: Once = Once::new();
 static mut FORM_CLASS_ATOM: ATOM = 0;
 
@@ -294,7 +310,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.hInstance = instance;
         class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
-        class_ex.hbrBackground = HBRUSH((COLOR_WINDOW.0 + 1) as _);
+        class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
         class_ex.lpfnWndProc = Some(form_wndproc);
         class_ex.hCursor = LoadCursorW(HMODULE(0), IDC_ARROW).unwrap();
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
@@ -315,6 +331,8 @@ extern "system" fn form_wndproc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
+    use windows::Win32::UI::WindowsAndMessaging as wm;
+
     unsafe {
         match message {
             WM_CREATE => {
@@ -386,34 +404,13 @@ extern "system" fn form_wndproc(
             WM_COMMAND => {
                 // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
 
-                if lparam.0 != 0 {
-                    // It's a child window handle.
-                    let child_hwnd: HWND = HWND(lparam.0);
+                let control = ControlId(wparam_loword(wparam));
+                let command = Command(wparam_hiword(wparam) as u32);
 
-                    let event_handlers = state.event_handlers.borrow();
-                    if let Some(handler) = event_handlers.get(&child_hwnd.0) {
-                        debug!(
-                            "WM_COMMAND: 0x{:x} hwnd 0x{:x} - found handler",
-                            wparam.0, lparam.0
-                        );
-
-                        let h = Rc::clone(handler);
-                        drop(event_handlers); // drop the dynamic borrow
-
-                        let notify_code = (wparam.0 >> 16) as u16;
-                        let control_id = wparam.0 as u16;
-
-                        return h.wm_command(control_id, notify_code);
-                    } else {
-                        debug!(
-                            "WM_COMMAND: 0x{:x} hwnd 0x{:x} - no handler found",
-                            wparam.0, lparam.0
-                        );
-                        return LRESULT(0);
-                    }
+                if let Some(handler) = state.command_handler.get() {
+                    handler(control, command);
                 } else {
-                    debug!("WM_COMMAND: 0x{:x}", wparam.0);
-                    // return 0;
+                    debug!("WM_COMMAND: no handler is installed");
                 }
             }
 
@@ -423,19 +420,27 @@ extern "system" fn form_wndproc(
             WM_NOTIFY => {
                 let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
-                // Look up the control by window handle.
-                let notify_handlers = state.notify_handlers.borrow();
-                if let Some(control) = notify_handlers.get(&hwnd_from.0) {
-                    // Clone the Rc.
-                    let cloned_control = control.handler.clone();
-                    drop(notify_handlers); // drop dynamic borrow
-                    match cloned_control.wm_notify(wparam, nmhdr_ptr) {
-                        NotifyResult::NotConsumed => {}
-                        NotifyResult::Consumed(result) => return result,
+                let notify_code = (*nmhdr_ptr).code;
+                let notify = Notify::from_nmhdr(nmhdr_ptr);
+
+                // For some notifications, we need to handle the notification directly.
+                match notify_code {
+                    TCN_SELCHANGE => {
+                        let tab_controls = state.tab_controls.borrow();
+                        for weak_tab_control in tab_controls.iter() {
+                            if let Some(tab_control) = weak_tab_control.upgrade() {
+                                // TODO: check that this is the right tab control
+                                tab_control.sync_visible();
+                            }
+                        }
                     }
+                    _ => {}
+                }
+
+                if let Some(handler) = state.notify_handler.get() {
+                    handler(&notify);
                 } else {
-                    debug!("WM_NOTIFY: received notification for unknown control window");
-                    // return 0;
+                    debug!("no WM_NOTIFY handler installed");
                 }
             }
 
@@ -511,6 +516,17 @@ extern "system" fn form_wndproc(
 
         DefWindowProcW(window, message, wparam, lparam)
     }
+}
+
+#[inline(always)]
+fn wparam_loword(wp: WPARAM) -> u16 {
+    wp.0 as u16
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+fn wparam_hiword(wp: WPARAM) -> u16 {
+    (wp.0 >> 16) as u16
 }
 
 impl Drop for Form {

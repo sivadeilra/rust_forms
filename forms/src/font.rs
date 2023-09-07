@@ -19,6 +19,18 @@ impl Font {
         Self::builder(font_family, height).build()
     }
 
+    pub fn from_logfont(logfont: &LOGFONTW) -> Result<Font> {
+        unsafe {
+            let hfont = CreateFontIndirectW(logfont);
+            if hfont.0 == 0 {
+                warn!("failed to create font");
+                return Err(Error::Windows(GetLastError()));
+            }
+
+            Ok(Font { hfont })
+        }
+    }
+
     pub fn builder(face_name: &str, height: i32) -> FontBuilder<'_> {
         FontBuilder {
             height,
@@ -64,7 +76,7 @@ impl<'a> FontBuilder<'a> {
             );
 
             if hfont.0 == 0 {
-                trace!("failed to create font");
+                warn!("failed to create font");
                 return Err(Error::Windows(GetLastError()));
             }
 

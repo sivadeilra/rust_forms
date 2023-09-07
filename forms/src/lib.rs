@@ -1,16 +1,22 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![allow(clippy::needless_late_init)]
+#![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::let_unit_value)]
 #![allow(clippy::single_match)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::collapsible_else_if)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::comparison_chain)]
 
 mod app;
 mod brush;
 mod button;
 mod color;
+mod command;
 mod control;
+pub mod custom;
 mod edit;
 mod error;
 mod executor;
@@ -18,19 +24,27 @@ mod ffi;
 pub mod file_dialog;
 mod font;
 mod form;
+pub mod gdi;
+pub mod init;
 mod label;
 pub mod layout;
 pub mod list_view;
 mod menu;
 mod messenger;
+mod msg;
+mod notify;
+mod rich_edit;
 mod status_bar;
+mod style;
 mod system_params;
+mod tab;
 pub mod tree_view;
 
 pub use app::*;
 pub use brush::{Brush, SysColor};
 pub use button::*;
 pub use color::*;
+pub use command::*;
 pub use control::*;
 pub use edit::*;
 pub use error::{Error, Result};
@@ -38,11 +52,18 @@ pub use executor::*;
 pub use font::*;
 pub use form::*;
 pub use label::Label;
+pub use layout::grid::*;
 pub use layout::*;
 pub use list_view::{ListView, Mode};
 pub use menu::*;
 pub use messenger::{Messenger, Sender};
+pub use msg::*;
+pub use notify::*;
+pub use rich_edit::RichEdit;
+pub use rich_edit::*;
 pub use status_bar::*;
+pub use style::*;
+pub use tab::*;
 pub use tree_view::{TreeNode, TreeView, TreeViewOptions};
 pub use windows::Win32::Foundation::RECTL as Rect;
 
@@ -79,24 +100,6 @@ pub struct Size(i32, i32);
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Point(i32, i32);
 
-/// Wraps a function that can handle an event of a given type.
-pub struct EventHandler<E> {
-    pub(crate) handler: Box<dyn Fn(E)>,
-}
-
-impl<E> EventHandler<E> {
-    pub fn new<H>(handler: H) -> Self
-    where
-        H: Fn(E) + 'static,
-    {
-        Self {
-            handler: Box::new(handler),
-        }
-    }
-}
-
-pub struct ControlHost {}
-
 pub(crate) fn set_window_text(hwnd: HWND, text: &str) {
     unsafe {
         let ws = WCString::from_str_truncate(text);
@@ -125,33 +128,13 @@ pub(crate) fn get_window_text(hwnd: HWND) -> String {
     }
 }
 
-fn init_common_controls() {
-    debug!("init_common_controls");
-    INIT_COMMON_CONTROLS.call_once(|| unsafe {
-        debug!("calling InitCommonControls (in once)");
-        let mut icc: INITCOMMONCONTROLSEX = zeroed();
-        icc.dwSize = size_of::<INITCOMMONCONTROLSEX>() as u32;
-        icc.dwICC = ICC_LISTVIEW_CLASSES | ICC_TREEVIEW_CLASSES | ICC_BAR_CLASSES;
-
-        let icc_result = InitCommonControlsEx(&icc).ok();
-        debug!("icc_result: {:?}", icc_result);
-
-        SetThemeAppProperties(SET_THEME_APP_PROPERTIES_FLAGS(
-            STAP_ALLOW_NONCLIENT | STAP_ALLOW_CONTROLS | STAP_ALLOW_WEBCONTENT,
-        ));
-    });
-}
-
 const STAP_ALLOW_NONCLIENT: u32 = 1 << 0;
 const STAP_ALLOW_CONTROLS: u32 = 1 << 1;
 const STAP_ALLOW_WEBCONTENT: u32 = 1 << 2;
 
-use std::sync::Once;
-
-static INIT_COMMON_CONTROLS: Once = Once::new();
-
 pub(crate) const WM_NOTIFY: u32 = 0x004E;
 
+#[allow(dead_code)]
 fn clone_cell_opt_rc<T>(rc: &Cell<Option<Rc<T>>>) -> Option<Rc<T>> {
     let value = rc.take();
     let result = value.clone();
@@ -255,5 +238,25 @@ impl StuckToThread {
                 "Expected this object to be used only on the thread that created it."
             );
         }
+    }
+}
+
+#[inline(always)]
+fn get_x_lparam(lparam: LPARAM) -> i16 {
+    lparam.0 as i16
+}
+
+#[inline(always)]
+fn get_y_lparam(lparam: LPARAM) -> i16 {
+    ((lparam.0 as u32) >> 16) as i16
+}
+
+#[inline(always)]
+fn rect_to_rectl(r: &RECT) -> RECTL {
+    RECTL {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
     }
 }

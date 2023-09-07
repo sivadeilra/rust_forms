@@ -2,7 +2,6 @@ use super::*;
 
 pub struct Edit {
     control: ControlState,
-    font: Cell<Option<Rc<Font>>>,
 }
 
 #[derive(Default, Clone)]
@@ -69,22 +68,16 @@ impl Edit {
                 panic!("Failed to create window");
             }
 
-            let control = ControlState::new(form, handle);
+            let control = ControlState::new(handle);
+            let this = Rc::new(Edit { control });
 
-            let this = Rc::new(Edit {
-                control,
-                font: Default::default(),
-            });
-
-            if let Some(font) = form.get_default_edit_font() {
-                this.set_font(font);
-            }
+            this.set_font(&form.style.edit_font);
 
             this
         }
     }
 
-    pub fn set_font(&self, font: Rc<Font>) {
+    pub fn set_font(&self, font: &Font) {
         unsafe {
             SendMessageW(
                 self.control.handle(),
@@ -92,7 +85,6 @@ impl Edit {
                 WPARAM(font.hfont.0 as usize),
                 LPARAM(1),
             );
-            self.font.set(Some(font));
         }
     }
 

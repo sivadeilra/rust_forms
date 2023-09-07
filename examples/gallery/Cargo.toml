@@ -1,12 +1,12 @@
 [package]
-name = "hello"
+name = "gallery"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 forms = { path = "../../forms" }
-regex = "1.5.4"
-walkdir = "2.3.2"
+log.workspace = true
+env_logger.workspace = true
 
 [build-dependencies]
 forms_build = { path = "../../forms_build" }
