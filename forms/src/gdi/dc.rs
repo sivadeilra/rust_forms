@@ -1,6 +1,6 @@
-use windows::Win32::Foundation::{POINT, COLORREF};
-use windows::Win32::Graphics::Gdi::{self, HGDIOBJ};
+use windows::Win32::Foundation::{COLORREF, POINT};
 use windows::Win32::Graphics::Gdi::HDC;
+use windows::Win32::Graphics::Gdi::{self, HGDIOBJ};
 
 use crate::ColorRef;
 
@@ -103,7 +103,15 @@ impl Dc {
     }
 
     #[inline(always)]
-    pub fn round_rect(&self, left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) {
+    pub fn round_rect(
+        &self,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        width: i32,
+        height: i32,
+    ) {
         unsafe {
             Gdi::RoundRect(self.hdc, left, top, right, bottom, width, height);
         }

@@ -191,7 +191,10 @@ impl Form {
             if GetClientRect(self.handle.get(), &mut client_rect).into() {
                 trace!(
                     "running layout, rect: {},{} - {},{}",
-                    client_rect.left, client_rect.top, client_rect.right, client_rect.bottom
+                    client_rect.left,
+                    client_rect.top,
+                    client_rect.right,
+                    client_rect.bottom
                 );
 
                 let layout_opt = self.layout.borrow();

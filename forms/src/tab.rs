@@ -179,16 +179,19 @@ impl TabControl {
                 let mut deferred_placer = DeferredLayoutPlacer::new(50);
 
                 if show_it {
-                    if !tab.pane.layout_is_valid.get() {
+                    debug!("... tab #{i} is visible");
+                    // if !tab.pane.layout_is_valid.get() {
+                    {
+                        let inner_cx = inner_client_rect.right - inner_client_rect.left;
+                        let inner_cy = inner_client_rect.bottom - inner_client_rect.top;
+                        debug!(
+                            "... tab #{i} has child layout; propagating {inner_cx} x {inner_cy}"
+                        );
                         let mut layout = tab.pane.layout.borrow_mut();
                         if let Some(layout) = &mut *layout {
-                            layout.place(
-                                &mut deferred_placer,
-                                0, // client_rect.left,
-                                0, // client_rect.top,
-                                inner_client_rect.right - inner_client_rect.left,
-                                inner_client_rect.bottom - inner_client_rect.top,
-                            );
+                            layout.place(&mut deferred_placer, 0, 0, inner_cx, inner_cy);
+                        } else {
+                            debug!("... tab #{i} does not have child layout; will not propagate");
                         }
 
                         // Place the pane window within the tab control, using inner_client_rect
@@ -227,12 +230,10 @@ impl TabControl {
                             }
                         }
 
-                        let mut placement = zeroed();
-                        GetWindowPlacement(tab.pane.handle(), &mut placement);
-                        debug!("placement: {:?}", placement);
-
                         tab.pane.layout_is_valid.set(true);
                     }
+                } else {
+                    debug!("... tab #{i} not visible");
                 }
 
                 drop(deferred_placer);
