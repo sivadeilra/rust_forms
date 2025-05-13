@@ -56,7 +56,7 @@ impl FileDialog {
         unsafe {
             let mut of: OPENFILENAMEW = zeroed();
             of.lStructSize = size_of_val(&of) as u32;
-            of.hwndOwner = parent.map(|f| f.handle()).unwrap_or(HWND(0));
+            of.hwndOwner = parent.map(|f| f.handle()).unwrap_or(HWND(null_mut()));
 
             // Filename buffer
             let mut filename_buffer: Vec<u16> = vec![0; 32768];

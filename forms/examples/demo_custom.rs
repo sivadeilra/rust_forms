@@ -2,7 +2,6 @@ use forms::custom::CustomControl;
 use forms::*;
 use std::cell::Cell;
 
-
 pub fn main() {
     let form = Form::builder()
         .size(1024, 768)

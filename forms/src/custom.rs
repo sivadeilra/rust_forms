@@ -2,7 +2,7 @@ use super::*;
 use crate::gdi::dc::Dc;
 use core::mem::MaybeUninit;
 use std::sync::Once;
-use windows::w;
+use windows::core::w;
 
 pub struct CustomControl<Inner>
 where
@@ -46,7 +46,7 @@ where
 
         unsafe {
             let mut me = Rc::new(Self {
-                control: ControlState::new(HWND(0)),
+                control: ControlState::new(HWND(null_mut())),
                 inner,
                 bouncer: MaybeUninit::zeroed(),
             });
@@ -64,15 +64,12 @@ where
                 0,   // y
                 400, // width
                 400, // height
-                parent.handle(),
-                HMENU(0),                      // hmenu
+                Some(parent.handle()),
+                None,                          // hmenu
                 None,                          // instance
                 Some(bouncer_ptr as *const _), // lpparam
-            );
-
-            if hwnd.0 == 0 {
-                panic!("Failed to create custom window");
-            }
+            )
+            .unwrap();
 
             debug!("created custom control");
 
@@ -104,7 +101,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
         class_ex.hbrBackground = HBRUSH((COLOR_WINDOW.0 + 1) as _);
         class_ex.lpfnWndProc = Some(custom_wndproc);
-        class_ex.hCursor = LoadCursorW(HMODULE(0), IDC_ARROW).unwrap();
+        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
         class_ex.cbWndExtra = (size_of::<*mut c_void>() * 2) as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -172,7 +169,7 @@ where
 
                     self.inner.paint(self, &dc, &rect_to_rectl(&paint.rcPaint));
 
-                    EndPaint(hwnd, &paint);
+                    _ = EndPaint(hwnd, &paint);
                 }
 
                 WM_MOUSEMOVE => {

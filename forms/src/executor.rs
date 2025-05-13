@@ -108,14 +108,12 @@ impl AsyncExecutor {
                 0,                                      // y
                 1,                                      // width
                 1,                                      // height
-                HWND_MESSAGE,
+                Some(HWND_MESSAGE),
                 None,
-                instance,
+                Some(instance),
                 None, // state_ptr.as_ptr() as *mut c_void,
-            );
-            if hwnd.0 == 0 {
-                panic!("Failed to create messaging window for AsyncExecutor");
-            }
+            )
+            .unwrap();
 
             let state: Arc<ExecutorState> = Arc::new(ExecutorState {
                 inner: Mutex::new(ExecutorInnerState {
@@ -170,7 +168,7 @@ impl AsyncExecutor {
 impl Drop for AsyncExecutor {
     fn drop(&mut self) {
         unsafe {
-            DestroyWindow(self.state.hwnd);
+            _ = DestroyWindow(self.state.hwnd);
             // TODO: I do not know what the behavior is if we call DestroyWindow
             // on a window that has a message posted to it (PostMessage).
             // I am going to assume for now that the posted message remains in
@@ -195,7 +193,7 @@ impl ExecutorState {
 
     fn schedule_always(&self) {
         unsafe {
-            if PostMessageW(self.hwnd, EXECUTOR_WM_POLL, WPARAM(0), LPARAM(0)).into() {
+            if PostMessageW(Some(self.hwnd), EXECUTOR_WM_POLL, WPARAM(0), LPARAM(0)).is_ok() {
                 trace!("posted EXECUTOR_WM_POLL");
             } else {
                 // PostMessage failed. Untrack the post_is_posted state.
@@ -375,9 +373,9 @@ fn register_class_lazy() -> ATOM {
         class_ex.hInstance = instance;
         class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
         class_ex.style = WNDCLASS_STYLES(0);
-        class_ex.hbrBackground = HBRUSH(0);
+        class_ex.hbrBackground = HBRUSH(null_mut());
         class_ex.lpfnWndProc = Some(executor_wndproc);
-        class_ex.hCursor = HCURSOR(0);
+        class_ex.hCursor = HCURSOR(null_mut());
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);

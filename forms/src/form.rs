@@ -2,10 +2,11 @@ use super::*;
 use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
-use log::debug;
 use std::cell::OnceCell;
 use std::sync::Once;
+use tracing::debug;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+use windows::Win32::UI::WindowsAndMessaging as wm;
 
 mod builder;
 
@@ -39,6 +40,7 @@ pub struct Form {
 
 assert_not_impl_any!(Form: Send, Sync);
 
+#[allow(dead_code)]
 pub(crate) trait MessageHandlerTrait: 'static {
     fn wm_command(&self, control_id: u16, notify_code: u16) -> LRESULT {
         let _ = (control_id, notify_code);
@@ -72,7 +74,7 @@ impl Form {
         self.stuck.check();
         self.ensure_layout_valid();
         unsafe {
-            ShowWindow(self.handle(), SW_SHOW);
+            _ = ShowWindow(self.handle(), SW_SHOW);
         }
     }
 
@@ -90,11 +92,11 @@ impl Form {
         unsafe {
             if let Some(menu) = menu {
                 let hmenu = menu.extract();
-                if !SetMenu(self.handle.get(), hmenu).as_bool() {
+                if SetMenu(self.handle.get(), Some(hmenu)).is_err() {
                     warn!("failed to set menu for form: {:?}", GetLastError());
                 }
             } else {
-                if SetMenu(self.handle.get(), HMENU(0)).as_bool() {
+                if SetMenu(self.handle.get(), None).is_ok() {
                     trace!("cleared menu for form");
                 } else {
                     warn!("failed to clear menu for form");
@@ -129,15 +131,15 @@ impl Form {
             SendMessageW(
                 self.handle(),
                 WM_SETFONT,
-                WPARAM(font.hfont.0 as usize),
-                LPARAM(1),
+                Some(WPARAM(font.hfont.0 as usize)),
+                Some(LPARAM(1)),
             );
         }
     }
 
     pub fn enable(&self, value: bool) {
         unsafe {
-            EnableWindow(self.handle(), BOOL(value as i32));
+            _ = EnableWindow(self.handle(), value);
         }
     }
 
@@ -181,17 +183,20 @@ impl Form {
             let mut sb_height = 0;
             if let Some(sb) = self.status_bar.take() {
                 self.status_bar.set(Some(sb.clone()));
-                SendMessageW(sb.handle(), WM_SIZE, WPARAM(0), LPARAM(0));
+                SendMessageW(sb.handle(), WM_SIZE, None, None);
                 let mut sb_rect: RECT = zeroed();
-                GetClientRect(sb.handle(), &mut sb_rect);
+                _ = GetClientRect(sb.handle(), &mut sb_rect);
                 sb_height = sb_rect.bottom - sb_rect.top;
             }
 
             let mut client_rect: RECT = zeroed();
-            if GetClientRect(self.handle.get(), &mut client_rect).into() {
+            if GetClientRect(self.handle.get(), &mut client_rect).is_ok() {
                 trace!(
                     "running layout, rect: {},{} - {},{}",
-                    client_rect.left, client_rect.top, client_rect.right, client_rect.bottom
+                    client_rect.left,
+                    client_rect.top,
+                    client_rect.right,
+                    client_rect.bottom
                 );
 
                 let layout_opt = self.layout.borrow();
@@ -243,7 +248,7 @@ impl Form {
 
         let disabler: Option<DisabledFormScope> = if let Some(p) = parent {
             unsafe {
-                EnableWindow(p.handle(), BOOL(0));
+                _ = EnableWindow(p.handle(), false);
             }
             Some(DisabledFormScope { form: p.handle() })
         } else {
@@ -260,11 +265,13 @@ impl Form {
         unsafe {
             loop {
                 let mut msg: MSG = zeroed();
-                let ret = GetMessageW(&mut msg, HWND(0), 0, 0).0;
+                let ret = GetMessageW(&mut msg, None, 0, 0).0;
                 if ret < 0 {
                     debug!("event loop: GetMessageW returned {}, quitting", ret);
                     break;
                 }
+
+                debug!("wm 0x{:04x}", msg.message);
 
                 if msg.message == WM_QUIT {
                     debug!("found WM_QUIT, quitting");
@@ -275,7 +282,7 @@ impl Form {
                     continue;
                 }
 
-                TranslateMessage(&msg);
+                _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
         }
@@ -289,7 +296,7 @@ struct DisabledFormScope {
 impl Drop for DisabledFormScope {
     fn drop(&mut self) {
         unsafe {
-            EnableWindow(self.form, BOOL(1));
+            _ = EnableWindow(self.form, true);
         }
     }
 }
@@ -312,7 +319,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
         class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
         class_ex.lpfnWndProc = Some(form_wndproc);
-        class_ex.hCursor = LoadCursorW(HMODULE(0), IDC_ARROW).unwrap();
+        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -331,11 +338,9 @@ extern "system" fn form_wndproc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    use windows::Win32::UI::WindowsAndMessaging as wm;
-
     unsafe {
         match message {
-            WM_CREATE => {
+            wm::WM_CREATE => {
                 let create_struct: *mut CREATESTRUCTW = lparam.0 as *mut CREATESTRUCTW;
                 assert!(!create_struct.is_null());
 
@@ -364,14 +369,19 @@ extern "system" fn form_wndproc(
         let state: &Form = &*(state_ptr as *const Form);
 
         match message {
-            /*
-            WM_PAINT => {
-                println!("WM_PAINT");
+            wm::WM_PAINT => {
+                debug!("WM_PAINT");
                 // ValidateRect(window, std::ptr::null());
-                0
+
+                let mut ps: PAINTSTRUCT = core::mem::zeroed();
+                let hdc: HDC = BeginPaint(window, &mut ps);
+
+                _ = EndPaint(window, &ps);
+
+                return LRESULT(0);
             }
-            */
-            WM_CLOSE => {
+
+            wm::WM_CLOSE => {
                 if let Some(exit_code) = state.quit_on_close {
                     debug!("WM_CLOSE: posting quit message");
                     post_quit_message(exit_code);
@@ -380,19 +390,19 @@ extern "system" fn form_wndproc(
                 }
             }
 
-            WM_DESTROY => {
+            wm::WM_DESTROY => {
                 debug!("WM_DESTROY");
                 return LRESULT(0);
             }
 
-            WM_SIZE => {
+            wm::WM_SIZE => {
                 let new_width = (lparam.0 & 0xffff) as u32;
                 let new_height = ((lparam.0 >> 16) & 0xffff) as u32;
                 trace!("WM_SIZE: {} x {}", new_width, new_height);
 
                 if let Some(sb) = state.status_bar.take() {
                     state.status_bar.set(Some(sb.clone()));
-                    SendMessageW(sb.handle(), WM_SIZE, WPARAM(0), LPARAM(0));
+                    SendMessageW(sb.handle(), WM_SIZE, None, None);
                 }
 
                 state.invalidate_layout();
@@ -401,7 +411,7 @@ extern "system" fn form_wndproc(
                 // return 0;
             }
 
-            WM_COMMAND => {
+            wm::WM_COMMAND => {
                 // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
 
                 let control = ControlId(wparam_loword(wparam));
@@ -417,7 +427,7 @@ extern "system" fn form_wndproc(
             // WM_NOTIFY is used by most of the Common Controls to communicate
             // with the app.
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-notify
-            WM_NOTIFY => {
+            wm::WM_NOTIFY => {
                 let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
                 let notify_code = (*nmhdr_ptr).code;
@@ -445,7 +455,7 @@ extern "system" fn form_wndproc(
             }
 
             // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
-            WM_SIZING => {
+            wm::WM_SIZING => {
                 let (min_width, min_height) = state.layout_min_size.get();
                 let window_size: &mut RECT = &mut *(lparam.0 as *mut RECT);
                 let height = window_size.bottom - window_size.top;
@@ -461,7 +471,7 @@ extern "system" fn form_wndproc(
 
                 let window_style = WINDOW_STYLE(GetWindowLongW(window, GWL_STYLE) as u32);
 
-                AdjustWindowRect(&mut adjusted_rect, window_style, false);
+                _ = AdjustWindowRect(&mut adjusted_rect, window_style, false);
                 let min_width = adjusted_rect.right - adjusted_rect.left;
                 let min_height = adjusted_rect.bottom - adjusted_rect.top;
 
@@ -495,15 +505,15 @@ extern "system" fn form_wndproc(
             }
 
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
-            WM_CTLCOLORSTATIC => {
-                let hdc = HDC(wparam.0 as isize);
+            wm::WM_CTLCOLORSTATIC => {
+                let hdc = HDC(wparam.0 as _);
                 let brush_opt = state.background_brush.take();
                 if let Some(brush) = brush_opt.as_ref() {
                     let hbrush = brush.handle();
-                    SelectObject(hdc, hbrush);
+                    SelectObject(hdc, HGDIOBJ(hbrush.0));
                     state.background_brush.set(brush_opt);
                     SetBkColor(hdc, COLORREF(state.background_color.get().as_u32()));
-                    return LRESULT(hbrush.0);
+                    return LRESULT(hbrush.0 as _);
                 }
 
                 return LRESULT(0);
@@ -534,7 +544,7 @@ impl Drop for Form {
         self.stuck.check();
 
         unsafe {
-            DestroyWindow(self.handle.get());
+            _ = DestroyWindow(self.handle.get());
 
             if self.co_initialized {
                 CoUninitialize();

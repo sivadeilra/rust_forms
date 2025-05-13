@@ -73,11 +73,11 @@ use core::marker::PhantomData;
 use core::mem::{size_of, size_of_val, zeroed};
 use core::ptr::{null, null_mut};
 use ffi::*;
-use log::{debug, error, trace, warn};
 use static_assertions::assert_not_impl_any;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
+use tracing::{debug, error, trace, warn};
 use widestring::U16CStr as WCStr;
 use widestring::U16CString as WCString;
 use widestring::U16CString;
@@ -103,13 +103,13 @@ pub struct Point(i32, i32);
 pub(crate) fn set_window_text(hwnd: HWND, text: &str) {
     unsafe {
         let ws = WCString::from_str_truncate(text);
-        SendMessageW(hwnd, WM_SETTEXT, WPARAM(0), LPARAM(ws.as_ptr() as isize));
+        SendMessageW(hwnd, WM_SETTEXT, None, Some(LPARAM(ws.as_ptr() as isize)));
     }
 }
 
 pub(crate) fn get_window_text(hwnd: HWND) -> String {
     unsafe {
-        let len_lresult = SendMessageW(hwnd, WM_GETTEXTLENGTH, WPARAM(0), LPARAM(0)).0;
+        let len_lresult = SendMessageW(hwnd, WM_GETTEXTLENGTH, None, None).0;
         assert!(len_lresult >= 0, "WM_GETTEXTLENGTH returned bogus value");
         let len = len_lresult as usize;
         let capacity = len + 1;
@@ -117,8 +117,8 @@ pub(crate) fn get_window_text(hwnd: HWND) -> String {
         let len_copied = SendMessageW(
             hwnd,
             WM_GETTEXT,
-            WPARAM(capacity),
-            LPARAM(buffer.as_mut_ptr() as isize),
+            Some(WPARAM(capacity)),
+            Some(LPARAM(buffer.as_mut_ptr() as isize)),
         )
         .0;
         assert!(len_copied >= 0);
@@ -145,13 +145,16 @@ fn clone_cell_opt_rc<T>(rc: &Cell<Option<Rc<T>>>) -> Option<Rc<T>> {
 pub fn get_cursor_pos() -> POINT {
     unsafe {
         let mut pt: POINT = zeroed();
-        GetCursorPos(&mut pt);
+        _ = GetCursorPos(&mut pt);
         pt
     }
 }
 
-pub(crate) fn get_instance() -> HMODULE {
-    unsafe { windows::Win32::System::LibraryLoader::GetModuleHandleA(None).unwrap() }
+pub(crate) fn get_instance() -> HINSTANCE {
+    unsafe {
+        let hmodule = windows::Win32::System::LibraryLoader::GetModuleHandleA(None).unwrap();
+        HINSTANCE(hmodule.0)
+    }
 }
 
 pub fn with<T, F: FnMut(&mut T)>(mut value: T, mut f: F) -> T {
@@ -195,8 +198,17 @@ impl DeferWindowPosOp {
         flags: SET_WINDOW_POS_FLAGS,
     ) {
         unsafe {
-            self.hdwp =
-                DeferWindowPos(self.hdwp, hwnd, hwnd_insert_after, x, y, cx, cy, flags).unwrap();
+            self.hdwp = DeferWindowPos(
+                self.hdwp,
+                hwnd,
+                Some(hwnd_insert_after),
+                x,
+                y,
+                cx,
+                cy,
+                flags,
+            )
+            .unwrap();
         }
     }
 }
@@ -204,7 +216,7 @@ impl DeferWindowPosOp {
 impl Drop for DeferWindowPosOp {
     fn drop(&mut self) {
         unsafe {
-            EndDeferWindowPos(self.hdwp);
+            _ = EndDeferWindowPos(self.hdwp);
         }
     }
 }

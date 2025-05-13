@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 forms = { path = "../../forms" }
-log.workspace = true
-env_logger.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [build-dependencies]
 forms_build = { path = "../../forms_build" }

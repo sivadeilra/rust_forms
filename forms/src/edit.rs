@@ -58,15 +58,12 @@ impl Edit {
                 0,
                 0,
                 0,
-                Some(&form.handle()),
+                Some(form.handle()),
                 None, // menu
                 None, // instance
                 None, // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
-            );
-
-            if handle.0 == 0 {
-                panic!("Failed to create window");
-            }
+            )
+            .unwrap();
 
             let control = ControlState::new(handle);
             let this = Rc::new(Edit { control });
@@ -82,8 +79,8 @@ impl Edit {
             SendMessageW(
                 self.control.handle(),
                 WM_SETFONT,
-                WPARAM(font.hfont.0 as usize),
-                LPARAM(1),
+                Some(WPARAM(font.hfont.0 as usize)),
+                Some(LPARAM(1)),
             );
         }
     }
@@ -101,8 +98,8 @@ impl Edit {
             SendMessageW(
                 self.handle(),
                 EM_SETREADONLY,
-                WPARAM(value as usize),
-                LPARAM(0),
+                Some(WPARAM(value as usize)),
+                None,
             );
         }
     }

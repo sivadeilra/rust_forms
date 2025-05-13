@@ -1,4 +1,4 @@
-use windows::w;
+use windows::core::w;
 
 use super::*;
 use core::any::Any;
@@ -75,17 +75,12 @@ impl TreeView {
                 0,
                 0,
                 0,
-                parent_window,
-                HMENU(0),
-                get_instance(),
+                Some(parent_window),
                 None,
-            );
-
-            if hwnd.0 == 0 {
-                panic!("failed to create TreeView window");
-            }
-
-            // let _ = windows::Win32::UI::Controls::SetWindowTheme(hwnd, w!("EXPLORER"), PCWSTR::null());
+                Some(get_instance()),
+                None,
+            )
+            .unwrap();
 
             form.invalidate_layout();
 
@@ -115,15 +110,7 @@ impl TreeView {
 
     #[allow(dead_code)]
     fn get_ex_style(&self) -> u32 {
-        unsafe {
-            SendMessageW(
-                self.control.handle(),
-                TVM_GETEXTENDEDSTYLE,
-                WPARAM(0),
-                LPARAM(0),
-            )
-            .0 as u32
-        }
+        unsafe { SendMessageW(self.control.handle(), TVM_GETEXTENDEDSTYLE, None, None).0 as u32 }
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/tvm-setextendedstyle
@@ -132,8 +119,8 @@ impl TreeView {
             SendMessageW(
                 self.control.handle(),
                 TVM_SETEXTENDEDSTYLE,
-                WPARAM(mask as usize),
-                LPARAM(values as isize),
+                Some(WPARAM(mask as usize)),
+                Some(LPARAM(values as isize)),
             );
         }
     }
@@ -167,8 +154,8 @@ impl TreeView {
                 SendMessageW(
                     self.handle(),
                     TVM_INSERTITEM,
-                    WPARAM(0),
-                    LPARAM(&item as *const _ as isize),
+                    None,
+                    Some(LPARAM(&item as *const _ as isize)),
                 )
                 .0,
             );
@@ -263,11 +250,11 @@ impl TreeNode {
         // Since we just pulled them out of the handle table _and_ set the
         // `deleted` field of each one, we should be good.
         unsafe {
-            SendMessageW(
+            _ = SendMessageW(
                 self.tree.handle(),
                 TVM_DELETEITEM,
-                WPARAM(0),
-                LPARAM(self.state.hitem.0),
+                None,
+                Some(LPARAM(self.state.hitem.0)),
             );
         }
     }
@@ -279,11 +266,11 @@ impl TreeNode {
                 return;
             }
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                WPARAM(TVE_EXPAND.0 as usize),
-                LPARAM(self.state.hitem.0),
+                Some(WPARAM(TVE_EXPAND.0 as usize)),
+                Some(LPARAM(self.state.hitem.0)),
             );
         }
     }
@@ -294,11 +281,11 @@ impl TreeNode {
                 return;
             }
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                WPARAM(TVE_COLLAPSE.0 as usize),
-                LPARAM(self.state.hitem.0),
+                Some(WPARAM(TVE_COLLAPSE.0 as usize)),
+                Some(LPARAM(self.state.hitem.0)),
             );
         }
     }
@@ -309,11 +296,11 @@ impl TreeNode {
                 return;
             }
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.tree.handle(),
                 TVM_EXPAND,
-                WPARAM(TVE_TOGGLE.0 as usize),
-                LPARAM(self.state.hitem.0),
+                Some(WPARAM(TVE_TOGGLE.0 as usize)),
+                Some(LPARAM(self.state.hitem.0)),
             );
         }
     }
@@ -324,11 +311,11 @@ impl TreeNode {
                 return;
             }
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.tree.handle(),
                 TVM_ENSUREVISIBLE,
-                WPARAM(0),
-                LPARAM(self.state.hitem.0),
+                None,
+                Some(LPARAM(self.state.hitem.0)),
             );
         }
     }
@@ -342,8 +329,8 @@ impl TreeNode {
             let state = SendMessageW(
                 self.tree.handle(),
                 TVM_GETITEMSTATE,
-                WPARAM(self.state.hitem.0 as usize),
-                LPARAM(TVIF_STATEEX.0 as isize),
+                Some(WPARAM(self.state.hitem.0 as usize)),
+                Some(LPARAM(TVIF_STATEEX.0 as isize)),
             );
             (state.0 as u32 & TVIS_SELECTED.0) != 0
         }
@@ -362,8 +349,8 @@ fn remove_items_rec(
             SendMessageW(
                 hwnd,
                 TVM_GETNEXTITEM,
-                WPARAM(TVGN_CHILD as usize),
-                LPARAM(hitem.0),
+                Some(WPARAM(TVGN_CHILD as usize)),
+                Some(LPARAM(hitem.0)),
             )
             .0,
         );
@@ -374,8 +361,8 @@ fn remove_items_rec(
                 SendMessageW(
                     hwnd,
                     TVM_GETNEXTITEM,
-                    WPARAM(TVGN_NEXT as usize),
-                    LPARAM(current_child.0),
+                    Some(WPARAM(TVGN_NEXT as usize)),
+                    Some(LPARAM(current_child.0)),
                 )
                 .0,
             );

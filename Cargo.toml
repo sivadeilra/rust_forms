@@ -1,4 +1,6 @@
-[workspace] 
+[workspace]
+resolver = "2"
+
 members = [
     "examples/gallery",
     "examples/hello",
@@ -8,9 +10,9 @@ members = [
 
 [workspace.dependencies]
 widestring = "1.0.2"
-log = "0.4.17"
 static_assertions = "1.0"
-windows = "0.48.0"
-windows-sys = "0.48.0"
-tokio = "1.27.0"
-env_logger = "0.10.0"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+windows = "0.61.1"
+windows-sys = "0.59.0"
+tokio = "1.45.0"

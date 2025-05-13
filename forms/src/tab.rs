@@ -1,6 +1,6 @@
 use super::*;
 use std::sync::Once;
-use windows::w;
+use windows::core::w;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 
 pub struct TabControl {
@@ -59,14 +59,12 @@ impl TabControl {
                 0,   // y
                 400, // width
                 400, // height
-                parent.handle(),
-                HMENU(0), // hmenu
-                None,     // instance
-                None,     // lpparam
-            );
-            if hwnd.0 == 0 {
-                panic!("Failed to create tabs");
-            }
+                Some(parent.handle()),
+                None, // hmenu
+                None, // instance
+                None, // lpparam
+            )
+            .unwrap();
 
             let rc = Rc::new(Self {
                 control: ControlState::new(hwnd),
@@ -76,7 +74,7 @@ impl TabControl {
             if true {
                 let tab_control_ptr: *const TabControl = &*rc;
 
-                SetWindowSubclass(
+                _ = SetWindowSubclass(
                     hwnd,
                     Some(tab_control_subclass_proc),
                     0, // subclass_id
@@ -104,14 +102,12 @@ impl TabControl {
                 50,  // y
                 400, // width
                 400, // height
-                self.handle(),
-                HMENU(0), // hmenu
-                None,     // instance
-                None,     // lpparam
-            );
-            if tab_hwnd.0 == 0 {
-                panic!("Failed to create tabs");
-            }
+                Some(self.handle()),
+                None, // hmenu
+                None, // instance
+                None, // lpparam
+            )
+            .unwrap();
 
             let label_wstr = U16CString::from_str_truncate(label);
             let mut item: TCITEMW = core::mem::zeroed();
@@ -119,11 +115,11 @@ impl TabControl {
             item.iImage = -1;
             item.pszText = PWSTR(label_wstr.as_ptr() as *mut _);
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.control.handle(),
                 TCM_INSERTITEM,
-                WPARAM(item_index as usize),
-                LPARAM(&item as *const TCITEMW as isize),
+                Some(WPARAM(item_index as usize)),
+                Some(LPARAM(&item as *const TCITEMW as isize)),
             );
 
             let pane = Rc::new(TabPane {
@@ -148,7 +144,7 @@ impl TabControl {
 
     pub fn select_tab(&self, index: u32) {
         unsafe {
-            SendMessageW(self.handle(), TCM_SETCURSEL, WPARAM(index as _), LPARAM(0));
+            _ = SendMessageW(self.handle(), TCM_SETCURSEL, Some(WPARAM(index as _)), None);
             self.sync_visible();
         }
     }
@@ -160,21 +156,21 @@ impl TabControl {
             let client_rect = self.get_client_rect();
 
             let mut inner_client_rect = client_rect;
-            SendMessageW(
+            _ = SendMessageW(
                 self.handle(),
                 TCM_ADJUSTRECT,
-                WPARAM(0),
-                LPARAM(&mut inner_client_rect as *mut RECT as isize),
+                None,
+                Some(LPARAM(&mut inner_client_rect as *mut RECT as isize)),
             );
             debug!("TabControl: client rect: {:?}", client_rect);
             debug!("TabControl: inner area:  {:?}", inner_client_rect);
 
-            let cur_sel = SendMessageW(self.handle(), TCM_GETCURSEL, WPARAM(0), LPARAM(0));
+            let cur_sel = SendMessageW(self.handle(), TCM_GETCURSEL, None, None);
             let tabs = self.tabs.borrow();
 
             for (i, tab) in tabs.iter().enumerate() {
                 let show_it = i as u32 == cur_sel.0 as u32;
-                ShowWindow(tab.hwnd, if show_it { SW_SHOW } else { SW_HIDE });
+                _ = ShowWindow(tab.hwnd, if show_it { SW_SHOW } else { SW_HIDE });
 
                 let mut deferred_placer = DeferredLayoutPlacer::new(50);
 
@@ -207,9 +203,9 @@ impl TabControl {
                             // when setting the placement for the pane window.  Using SetWindowPos
                             // works, though.
                             if true {
-                                SetWindowPos(
+                                _ = SetWindowPos(
                                     tab.pane.handle(),
-                                    HWND(0),
+                                    None,
                                     x,
                                     y,
                                     width,
@@ -228,7 +224,7 @@ impl TabControl {
                         }
 
                         let mut placement = zeroed();
-                        GetWindowPlacement(tab.pane.handle(), &mut placement);
+                        _ = GetWindowPlacement(tab.pane.handle(), &mut placement);
                         debug!("placement: {:?}", placement);
 
                         tab.pane.layout_is_valid.set(true);
@@ -255,7 +251,7 @@ fn register_class_lazy() -> ATOM {
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
         class_ex.hbrBackground = HBRUSH((COLOR_WINDOW.0 + 1) as _);
         class_ex.lpfnWndProc = Some(tab_wndproc);
-        class_ex.hCursor = LoadCursorW(HMODULE(0), IDC_ARROW).unwrap();
+        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -280,8 +276,8 @@ extern "system" fn tab_wndproc(
         match message {
             WM_COMMAND | WM_NOTIFY => {
                 // Forward WM_COMMAND and WM_NOTIFY up the window tree.
-                let parent_hwnd = GetParent(hwnd);
-                return SendMessageW(parent_hwnd, message, wparam, lparam);
+                let parent_hwnd = GetParent(hwnd).unwrap();
+                return SendMessageW(parent_hwnd, message, Some(wparam), Some(lparam));
             }
 
             _ => {}

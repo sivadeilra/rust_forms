@@ -28,15 +28,12 @@ impl Label {
                 0,
                 0,
                 0,
-                parent_window,
-                HMENU(0),       // hmenu,
-                get_instance(), // hinstance,
+                Some(parent_window),
+                None,                 // hmenu,
+                Some(get_instance()), // hinstance,
                 None,
-            );
-
-            if hwnd.0 == 0 {
-                panic!("failed to create control window");
-            }
+            )
+            .unwrap();
 
             let this = Label {
                 control: ControlState::new(hwnd),
@@ -57,8 +54,8 @@ impl Label {
             SendMessageW(
                 self.handle(),
                 WM_SETFONT,
-                WPARAM(font.hfont.0 as usize),
-                LPARAM(1),
+                Some(WPARAM(font.hfont.0 as usize)),
+                Some(LPARAM(1)),
             );
         }
     }

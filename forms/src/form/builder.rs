@@ -1,5 +1,5 @@
 use super::*;
-use windows::w;
+use windows::core::w;
 
 pub struct FormBuilder<'a> {
     args: Box<FormArgs<'a>>,
@@ -77,7 +77,7 @@ impl<'a> FormBuilder<'a> {
         };
 
         unsafe {
-            let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
+            let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() {
                 Ok(()) => {
                     debug!("CoInitializeEx succeeded");
                     true
@@ -112,7 +112,7 @@ impl<'a> FormBuilder<'a> {
                 co_initialized,
                 stuck: StuckToThread::new(),
                 control: Default::default(),
-                handle: Cell::new(HWND(0)),
+                handle: Cell::new(HWND(null_mut())),
                 quit_on_close: self.args.quit_on_close,
                 is_layout_valid: Cell::new(false),
                 layout: RefCell::new(None),
@@ -128,13 +128,13 @@ impl<'a> FormBuilder<'a> {
 
             let form_alloc_ptr: *const Form = &*form_alloc;
 
-            let parent_window_handle: HWND = if let Some(parent) = self.args.parent {
-                parent.handle()
+            let parent_window_handle: Option<HWND> = if let Some(parent) = self.args.parent {
+                Some(parent.handle())
             } else {
-                HWND(0)
+                None
             };
 
-            let handle = CreateWindowExW(
+            let handle = match CreateWindowExW(
                 ex_style,
                 PCWSTR::from_raw(window_class_atom as usize as *const u16),
                 window_name_pwstr,
@@ -145,19 +145,20 @@ impl<'a> FormBuilder<'a> {
                 height,
                 parent_window_handle,
                 None,
-                instance,
+                Some(instance),
                 Some(form_alloc_ptr as *const c_void as *mut c_void),
-            );
-
-            if handle.0 == 0 {
-                panic!("Failed to create window");
-            }
+            ) {
+                Ok(h) => h,
+                Err(e) => {
+                    panic!("Failed to create window: {e:?}");
+                }
+            };
 
             // let _ = SetWindowTheme(handle, w!("EXPLORER"), PCWSTR::null());
             // let _ = SetWindowTheme(handle, w!("Window"), PCWSTR::null());
 
             let button_string = U16CString::from_str_truncate("BUTTON");
-            let htheme = OpenThemeData(handle, PCWSTR::from_raw(button_string.as_ptr()));
+            let htheme = OpenThemeData(Some(handle), PCWSTR::from_raw(button_string.as_ptr()));
             if htheme.0 != 0 {
                 debug!("ooo, got theme data");
 
@@ -181,7 +182,7 @@ impl<'a> FormBuilder<'a> {
             let htheme = GetWindowTheme(handle);
 
             let mut logfont: LOGFONTW = zeroed();
-            match GetThemeSysFont(htheme, TMT_STATUSFONT, &mut logfont) {
+            match GetThemeSysFont(Some(htheme), TMT_STATUSFONT, &mut logfont) {
                 Ok(f) => {
                     debug!(
                         "GetThemeFont succeeded: {}",
@@ -208,7 +209,7 @@ impl<'a> FormBuilder<'a> {
                 form_alloc.background_brush.set(Some(br));
             }
 
-            SendMessageW(handle, WM_THEMECHANGED, WPARAM(0), LPARAM(0));
+            _ = SendMessageW(handle, WM_THEMECHANGED, None, None);
 
             /*
             match Font::new("Arial", 10) {

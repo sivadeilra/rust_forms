@@ -106,9 +106,9 @@ impl ControlState {
     pub fn set_rect(&self, rect: &Rect) {
         self.check_thread();
         unsafe {
-            SetWindowPos(
+            _ = SetWindowPos(
                 self.hwnd,
-                HWND(0), // insert after
+                None, // insert after
                 rect.left,
                 rect.top,
                 rect.right - rect.left,
@@ -121,7 +121,7 @@ impl ControlState {
     pub fn get_client_rect(&self) -> RECT {
         unsafe {
             let mut client_rect: RECT = zeroed();
-            GetClientRect(self.hwnd, &mut client_rect);
+            _ = GetClientRect(self.hwnd, &mut client_rect);
             client_rect
         }
     }
@@ -132,9 +132,9 @@ impl ControlState {
 
     pub fn show(&self) {
         unsafe {
-            SetWindowPos(
+            _ = SetWindowPos(
                 self.hwnd,
-                HWND(0),
+                None,
                 0,
                 0,
                 0,
@@ -146,9 +146,9 @@ impl ControlState {
 
     pub fn hide(&self) {
         unsafe {
-            SetWindowPos(
+            _ = SetWindowPos(
                 self.hwnd,
-                HWND(0),
+                None,
                 0,
                 0,
                 0,
@@ -160,7 +160,7 @@ impl ControlState {
 
     pub fn invalidate_all(&self) {
         unsafe {
-            InvalidateRect(self.hwnd, None, TRUE);
+            _ = InvalidateRect(Some(self.hwnd), None, true);
         }
     }
 }

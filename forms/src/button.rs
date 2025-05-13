@@ -1,4 +1,4 @@
-use windows::w;
+use windows::core::w;
 
 use super::*;
 
@@ -127,15 +127,12 @@ impl Button {
                 0,
                 0,
                 0,
-                parent_window,
-                HMENU(builder.id.0 as _), // hmenu,
-                get_instance(),           // hinstance,
+                Some(parent_window),
+                Some(HMENU(builder.id.0 as _)), // hmenu,
+                Some(get_instance()),           // hinstance,
                 None,
-            );
-
-            if hwnd.0 == 0 {
-                panic!("failed to create button window");
-            }
+            )
+            .unwrap();
 
             let this = Rc::new(Button {
                 control: ControlState::new(hwnd),
@@ -157,7 +154,7 @@ impl Button {
 
     pub fn set_enabled(&self, value: bool) {
         unsafe {
-            EnableWindow(self.control.handle(), value);
+            _ = EnableWindow(self.control.handle(), value);
         }
     }
 
@@ -166,8 +163,8 @@ impl Button {
             SendMessageW(
                 self.control.handle(),
                 WM_SETFONT,
-                WPARAM(font.hfont.0 as usize),
-                LPARAM(1),
+                Some(WPARAM(font.hfont.0 as usize)),
+                Some(LPARAM(1)),
             );
         }
     }
@@ -178,40 +175,40 @@ impl Button {
 
     pub fn is_checked(&self) -> bool {
         unsafe {
-            let result = SendMessageW(self.handle(), BM_GETCHECK, WPARAM(0), LPARAM(0));
+            let result = SendMessageW(self.handle(), BM_GETCHECK, None, None);
             result.0 == BST_CHECKED.0 as isize
         }
     }
 
     pub fn set_checked(&self, value: bool) {
         unsafe {
-            SendMessageW(
+            _ = SendMessageW(
                 self.handle(),
                 BM_SETCHECK,
                 if value {
-                    WPARAM(BST_CHECKED.0 as _)
+                    Some(WPARAM(BST_CHECKED.0 as _))
                 } else {
-                    WPARAM(BST_UNCHECKED.0 as _)
+                    Some(WPARAM(BST_UNCHECKED.0 as _))
                 },
-                LPARAM(0),
+                None,
             );
         }
     }
 
     pub fn get_check_state(&self) -> CheckState {
         unsafe {
-            let result = SendMessageW(self.handle(), BM_GETCHECK, WPARAM(0), LPARAM(0));
+            let result = SendMessageW(self.handle(), BM_GETCHECK, None, None);
             CheckState::from_bst(DLG_BUTTON_CHECK_STATE(result.0 as _))
         }
     }
 
     pub fn set_check_state(&self, value: CheckState) {
         unsafe {
-            SendMessageW(
+            _ = SendMessageW(
                 self.handle(),
                 BM_SETCHECK,
-                WPARAM(value.to_bst().0 as _),
-                LPARAM(0),
+                Some(WPARAM(value.to_bst().0 as _)),
+                None,
             );
         }
     }

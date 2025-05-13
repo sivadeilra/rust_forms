@@ -16,7 +16,7 @@ impl Brush {
     pub fn from_color_ref(color: ColorRef) -> Result<Brush> {
         unsafe {
             let hbrush = CreateSolidBrush(COLORREF::from(color));
-            if hbrush.0 != 0 {
+            if !hbrush.0.is_null() {
                 Ok(Brush::Owned(OwnedBrush { hbrush }))
             } else {
                 Err(Error::Windows(GetLastError()))
@@ -41,7 +41,7 @@ impl SystemBrush {
     pub fn from_sys_color(color: SysColor) -> Result<SystemBrush> {
         unsafe {
             let hbrush = GetSysColorBrush(SYS_COLOR_INDEX(color as i32));
-            if hbrush.0 != 0 {
+            if !hbrush.0.is_null() {
                 Ok(SystemBrush(hbrush))
             } else {
                 Err(Error::Windows(ERROR_NOT_SUPPORTED))

@@ -9,7 +9,7 @@ pub struct Font {
 impl Drop for Font {
     fn drop(&mut self) {
         unsafe {
-            DeleteObject(self.hfont);
+            _ = DeleteObject(HGDIOBJ(self.hfont.0));
         }
     }
 }
@@ -22,7 +22,7 @@ impl Font {
     pub fn from_logfont(logfont: &LOGFONTW) -> Result<Font> {
         unsafe {
             let hfont = CreateFontIndirectW(logfont);
-            if hfont.0 == 0 {
+            if hfont.0.is_null() {
                 warn!("failed to create font");
                 return Err(Error::Windows(GetLastError()));
             }
@@ -61,21 +61,21 @@ impl<'a> FontBuilder<'a> {
             let hfont = CreateFontW(
                 self.height,
                 self.width,
-                0,                        // escapement,
-                0,                        // orientation,
-                0,                        // weight,
-                self.italic as u32,       // italic,
-                self.underline as u32,    // underline,
-                self.strikeout as u32,    // strikeout,
-                0,                        // charset,
-                0,                        // outprecision,
-                0,                        // clipprecision,
-                self.quality.to_native(), // quality,
-                0,                        // pitchandfamily,
+                0,                                            // escapement,
+                0,                                            // orientation,
+                0,                                            // weight,
+                self.italic as u32,                           // italic,
+                self.underline as u32,                        // underline,
+                self.strikeout as u32,                        // strikeout,
+                FONT_CHARSET(0),                              // charset,
+                FONT_OUTPUT_PRECISION(0),                     // outprecision,
+                FONT_CLIP_PRECISION(0),                       // clipprecision,
+                FONT_QUALITY(self.quality.to_native() as u8), // quality,
+                0,                                            // pitchandfamily,
                 PCWSTR::from_raw(face_name.as_ptr()),
             );
 
-            if hfont.0 == 0 {
+            if hfont.0.is_null() {
                 warn!("failed to create font");
                 return Err(Error::Windows(GetLastError()));
             }

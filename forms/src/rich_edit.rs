@@ -4,8 +4,8 @@ use std::mem::zeroed;
 use std::rc::Rc;
 use std::sync::Once;
 use widestring::U16CString;
+use windows::core::w;
 use windows::core::PCWSTR;
-use windows::w;
 use windows::Win32::Foundation::LPARAM;
 use windows::Win32::Foundation::WPARAM;
 use windows::Win32::System::LibraryLoader::LoadLibraryW;
@@ -45,15 +45,12 @@ impl RichEdit {
                 0,
                 0,
                 0,
-                Some(&parent.handle()),
+                Some(parent.handle()),
                 None, // menu
                 None, // instance
                 None,
-            );
-
-            if handle.0 == 0 {
-                panic!("Failed to create window");
-            }
+            )
+            .unwrap();
 
             Rc::new(RichEdit {
                 control: ControlState::new(handle),
@@ -69,11 +66,11 @@ impl RichEdit {
                 codepage: SETTEXT_CODEPAGE_UNICODE,
             };
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.handle(),
                 EM_SETTEXTEX,
-                WPARAM(&set_text as *const _ as usize),
-                LPARAM(ws.as_ptr() as isize),
+                Some(WPARAM(&set_text as *const _ as usize)),
+                Some(LPARAM(ws.as_ptr() as isize)),
             );
         }
     }
@@ -82,18 +79,18 @@ impl RichEdit {
     fn set_option_bool(&self, mask: u32, value: bool) {
         unsafe {
             if value {
-                SendMessageW(
+                _ = SendMessageW(
                     self.handle(),
                     EM_SETOPTIONS,
-                    WPARAM(ECOOP_OR as usize),
-                    LPARAM(mask as isize),
+                    Some(WPARAM(ECOOP_OR as usize)),
+                    Some(LPARAM(mask as isize)),
                 );
             } else {
-                SendMessageW(
+                _ = SendMessageW(
                     self.handle(),
                     EM_SETOPTIONS,
-                    WPARAM(ECOOP_AND as usize),
-                    LPARAM((!mask) as isize),
+                    Some(WPARAM(ECOOP_AND as usize)),
+                    Some(LPARAM((!mask) as isize)),
                 );
             }
         }
@@ -101,7 +98,7 @@ impl RichEdit {
 
     fn get_option_bool(&self, mask: u32) -> bool {
         unsafe {
-            let lresult = SendMessageW(self.handle(), EM_GETOPTIONS, WPARAM(0), LPARAM(0));
+            let lresult = SendMessageW(self.handle(), EM_GETOPTIONS, None, None);
             (lresult.0 as u32) & mask != 0
         }
     }

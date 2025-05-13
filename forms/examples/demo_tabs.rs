@@ -6,7 +6,9 @@ const IDC_DELETE_TAB: ControlId = ControlId(3);
 const IDC_ZAP: ControlId = ControlId(4);
 
 pub fn main() {
-    env_logger::builder().format_timestamp(None).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let form = Form::builder()
         .size(1024, 768)

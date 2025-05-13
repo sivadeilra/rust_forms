@@ -30,20 +30,18 @@ impl StatusBar {
                 PCWSTR::from_raw(text.as_ptr()),
                 form.handle(),
                 0,
-            );
-            if hwnd.0 == 0 {
-                panic!("failed to create StatusBar");
-            }
+            )
+            .unwrap();
 
             let state: Rc<StatusBar> = Rc::new(StatusBar {
                 control: ControlState::new(hwnd),
             });
 
-            SendMessageW(
+            _ = SendMessageW(
                 state.handle(),
                 SB_SIMPLE,
-                WPARAM(1), // set it to simple mode.
-                LPARAM(0),
+                Some(WPARAM(1)), // set it to simple mode.
+                Some(LPARAM(0)),
             );
 
             form.invalidate_layout();
@@ -55,11 +53,11 @@ impl StatusBar {
         unsafe {
             let ws = U16CString::from_str_truncate(s);
 
-            SendMessageW(
+            _ = SendMessageW(
                 self.handle(),
                 SB_SETTEXT,
-                WPARAM(SB_SIMPLEID as _),
-                LPARAM(ws.as_ptr() as _),
+                Some(WPARAM(SB_SIMPLEID as _)),
+                Some(LPARAM(ws.as_ptr() as _)),
             );
         }
     }

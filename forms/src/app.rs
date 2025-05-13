@@ -8,7 +8,7 @@ pub fn event_loop() {
     unsafe {
         loop {
             let mut msg: MSG = zeroed();
-            let ret = GetMessageW(&mut msg, HWND(0), 0, 0).0;
+            let ret = GetMessageW(&mut msg, None, 0, 0).0;
             if ret < 0 {
                 debug!("event loop: GetMessageW returned {}, quitting", ret);
                 break;
@@ -19,7 +19,7 @@ pub fn event_loop() {
                 break;
             }
 
-            TranslateMessage(&msg);
+            _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }

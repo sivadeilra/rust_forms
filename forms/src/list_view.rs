@@ -20,7 +20,8 @@ impl ListView {
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
             let ex_style = WINDOW_EX_STYLE(0);
-            let hwnd = CreateWindowExW(
+
+            let hwnd = match CreateWindowExW(
                 ex_style,
                 PCWSTR::from_raw(class_name_wstr.as_ptr()),
                 PCWSTR::from_raw(window_name.as_ptr()),
@@ -29,15 +30,14 @@ impl ListView {
                 0,
                 0,
                 0,
-                parent_window,
-                HMENU(0),
-                get_instance(),
+                Some(parent_window),
                 None,
-            );
-
-            if hwnd.0 == 0 {
-                panic!("failed to create ListView window");
-            }
+                Some(HINSTANCE(get_instance().0)),
+                None,
+            ) {
+                Ok(h) => h,
+                Err(e) => panic!("failed to create ListView window: {e:?}"),
+            };
 
             let state: Rc<ListView> = Rc::new(ListView {
                 control: ControlState::new(hwnd),
@@ -65,8 +65,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_SETITEMSTATE,
-                WPARAM(item),
-                LPARAM(&lv_item as *const LVITEMW as isize),
+                Some(WPARAM(item)),
+                Some(LPARAM(&lv_item as *const LVITEMW as isize)),
             );
         }
     }
@@ -89,8 +89,8 @@ impl ListView {
             SendMessageW(
                 self.control.handle(),
                 LVM_INSERTCOLUMNW,
-                WPARAM(index as usize),
-                LPARAM(&col as *const LVCOLUMNW as isize),
+                Some(WPARAM(index as usize)),
+                Some(LPARAM(&col as *const LVCOLUMNW as isize)),
             );
         }
     }
@@ -101,8 +101,8 @@ impl ListView {
             SendMessageW(
                 self.control.handle(),
                 LVM_DELETECOLUMN,
-                WPARAM(index),
-                LPARAM(0),
+                Some(WPARAM(index)),
+                Some(LPARAM(0)),
             );
         }
     }
@@ -118,8 +118,8 @@ impl ListView {
                 SendMessageW(
                     self.control.handle(),
                     LVM_GETEXTENDEDLISTVIEWSTYLE,
-                    WPARAM(0),
-                    LPARAM(0),
+                    Some(WPARAM(0)),
+                    Some(LPARAM(0)),
                 )
                 .0 as u32,
             )
@@ -132,8 +132,8 @@ impl ListView {
             SendMessageW(
                 self.control.handle(),
                 LVM_SETEXTENDEDLISTVIEWSTYLE,
-                WPARAM(mask as usize),
-                LPARAM(values as isize),
+                Some(WPARAM(mask as usize)),
+                Some(LPARAM(values as isize)),
             );
         }
     }
@@ -192,18 +192,18 @@ impl ListView {
     ///
     /// See <https://docs.microsoft.com/en-us/windows/win32/controls/lvm-getitemcount>
     pub fn items_len(&self) -> usize {
-        unsafe { SendMessageW(self.handle(), LVM_GETITEMCOUNT, WPARAM(0), LPARAM(0)).0 as usize }
+        unsafe { SendMessageW(self.handle(), LVM_GETITEMCOUNT, None, None).0 as usize }
     }
 
     pub fn delete_item(&self, item: usize) {
         unsafe {
-            SendMessageW(self.handle(), LVM_DELETEITEM, WPARAM(item), LPARAM(0));
+            SendMessageW(self.handle(), LVM_DELETEITEM, Some(WPARAM(item)), None);
         }
     }
 
     pub fn delete_all_items(&self) {
         unsafe {
-            SendMessageW(self.handle(), LVM_DELETEALLITEMS, WPARAM(0), LPARAM(0));
+            SendMessageW(self.handle(), LVM_DELETEALLITEMS, None, None);
         }
     }
 
@@ -219,8 +219,8 @@ impl ListView {
             let mut len = SendMessageW(
                 self.handle(),
                 LVM_GETITEMTEXT,
-                WPARAM(item),
-                LPARAM(&mut lv_item as *mut _ as isize),
+                Some(WPARAM(item)),
+                Some(LPARAM(&mut lv_item as *mut _ as isize)),
             )
             .0;
             assert!(len >= 0);
@@ -234,8 +234,8 @@ impl ListView {
                 len = SendMessageW(
                     self.handle(),
                     LVM_GETITEMTEXT,
-                    WPARAM(item),
-                    LPARAM(&mut lv_item as *mut _ as isize),
+                    Some(WPARAM(item)),
+                    Some(LPARAM(&mut lv_item as *mut _ as isize)),
                 )
                 .0;
                 assert!(len >= 0);
@@ -248,7 +248,7 @@ impl ListView {
     /// https://docs.microsoft.com/en-us/windows/win32/controls/lvm-ensurevisible
     pub fn ensure_visible(&self, item: usize) {
         unsafe {
-            SendMessageW(self.handle(), LVM_ENSUREVISIBLE, WPARAM(item), LPARAM(0));
+            SendMessageW(self.handle(), LVM_ENSUREVISIBLE, Some(WPARAM(item)), None);
         }
     }
 
@@ -266,8 +266,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_INSERTITEMW,
-                WPARAM(0),
-                LPARAM(&lv_item as *const _ as isize),
+                None,
+                Some(LPARAM(&lv_item as *const _ as isize)),
             )
             .0 as usize
         }
@@ -284,8 +284,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_SETITEMTEXTW,
-                WPARAM(item),
-                LPARAM(&lv_item as *const _ as isize),
+                Some(WPARAM(item)),
+                Some(LPARAM(&lv_item as *const _ as isize)),
             );
         }
     }
@@ -299,8 +299,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_SETITEMTEXTW,
-                WPARAM(item),
-                LPARAM(&lv_item as *const _ as isize),
+                Some(WPARAM(item)),
+                Some(LPARAM(&lv_item as *const _ as isize)),
             );
         }
     }
@@ -329,8 +329,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_SETITEMSTATE,
-                WPARAM(item),
-                LPARAM(&lv_item as *const _ as isize),
+                Some(WPARAM(item)),
+                Some(LPARAM(&lv_item as *const _ as isize)),
             );
         }
     }
@@ -341,8 +341,8 @@ impl ListView {
             SendMessageW(
                 self.handle(),
                 LVM_SETVIEW,
-                WPARAM(mode.to_native() as usize),
-                LPARAM(0),
+                Some(WPARAM(mode.to_native() as usize)),
+                Some(LPARAM(0)),
             );
         }
     }
@@ -432,8 +432,8 @@ impl<'a> Iterator for IterSelectedItems<'a> {
             let result = SendMessageW(
                 self.list_view.control.handle(),
                 LVM_GETNEXTITEM,
-                WPARAM(self.next as usize),
-                LPARAM(LVNI_SELECTED as isize),
+                Some(WPARAM(self.next as usize)),
+                Some(LPARAM(LVNI_SELECTED as isize)),
             )
             .0;
             if result < 0 {

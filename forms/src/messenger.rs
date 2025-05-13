@@ -9,7 +9,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc;
 use std::sync::Once;
 use std::sync::{Arc, Mutex};
-use windows::w;
+use windows::core::w;
 use windows::Win32::System::Threading::{QueueUserWorkItem, WORKER_THREAD_FLAGS};
 
 #[derive(Clone)]
@@ -51,14 +51,12 @@ impl Messenger {
                 0,                     // y
                 1,                     // width
                 1,                     // height
-                Some(&HWND_MESSAGE),
+                Some(HWND_MESSAGE),
                 None,
-                instance,
+                Some(instance),
                 None,
-            );
-            if hwnd.0 == 0 {
-                panic!("Failed to create messaging window for Messenger");
-            }
+            )
+            .unwrap();
 
             let state: Rc<MessengerState> = Rc::new(MessengerState {
                 hwnd,
@@ -98,9 +96,9 @@ fn register_class_lazy() -> ATOM {
         class_ex.hInstance = instance;
         class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_ptr());
         class_ex.style = WNDCLASS_STYLES(0);
-        class_ex.hbrBackground = HBRUSH(0);
+        class_ex.hbrBackground = HBRUSH(null_mut());
         class_ex.lpfnWndProc = Some(messenger_wndproc);
-        class_ex.hCursor = HCURSOR(0);
+        class_ex.hCursor = HCURSOR(null_mut());
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
 
         let atom = RegisterClassExW(&class_ex);
@@ -194,7 +192,7 @@ extern "system" fn messenger_wndproc(
 impl Drop for MessengerState {
     fn drop(&mut self) {
         unsafe {
-            DestroyWindow(self.hwnd);
+            _ = DestroyWindow(self.hwnd);
         }
     }
 }
@@ -282,7 +280,12 @@ impl Messenger {
                 // detected. Still, it would be great if we could find a way
                 // to avoid this race condition.
                 if need_wake {
-                    PostMessageW(hwnd, MESSENGER_WM_POLL_PIPE_RECEIVERS, WPARAM(0), LPARAM(0));
+                    _ = PostMessageW(
+                        Some(hwnd),
+                        MESSENGER_WM_POLL_PIPE_RECEIVERS,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
                 }
             } else {
                 // This is a pretty bad outcome. It means that another thread
@@ -317,7 +320,7 @@ impl Messenger {
                 Some(context_ptr as *mut c_void),
                 WORKER_THREAD_FLAGS(0),
             )
-            .into()
+            .is_ok()
             {
                 trace!("run_background: queued work item in background thread");
             } else {
@@ -331,18 +334,6 @@ impl Messenger {
             }
         }
     }
-}
-
-/// Allows a value (that does not implement `Send`) to be passed from a UI
-/// thread to a different thread. The smuggled object can only be opened on
-/// the same original thread that created the smuggled object.
-///
-/// If the `Drop` handler for this type runs, then the contained value is leaked.
-/// This is required because the contained value can only safely be used on its
-/// original thread.
-#[cfg(todo)]
-pub struct Smuggled<T> {
-    cell: core::mem::MaybeUninit<T>,
 }
 
 pub struct FuncMessageReceiver<F, M>
@@ -495,6 +486,9 @@ struct QueueState<M> {
     hwnd: HWND,
 }
 
+unsafe impl<M> Send for QueueState<M> {}
+unsafe impl<M> Sync for QueueState<M> {}
+
 pub trait MessageReceiver<M> {
     fn message(&self, message: M);
     fn closed(&self) {}
@@ -516,8 +510,8 @@ impl<M> Sender<M> {
 
         if was_empty {
             unsafe {
-                PostMessageW(
-                    self.queue.hwnd,
+                _ = PostMessageW(
+                    Some(self.queue.hwnd),
                     MESSENGER_WM_POLL_PIPE_RECEIVERS,
                     WPARAM(0),
                     LPARAM(0),

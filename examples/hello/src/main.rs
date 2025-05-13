@@ -29,8 +29,8 @@ fn main() {
         .quit_on_close()
         .text("Search in Files")
         .build();
-    form.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
-    form.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
+    // form.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
+    // form.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
 
     // Create a channel for our worker thread.
     let (commands_sender, commands_receiver) = mpsc::channel::<WorkerCommand>();

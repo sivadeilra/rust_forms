@@ -7,9 +7,9 @@ pub struct Menu {
 impl Drop for Menu {
     fn drop(&mut self) {
         unsafe {
-            if self.hmenu.0 != 0 {
+            if !self.hmenu.0.is_null() {
                 // debug!("destroying HMENU 0x{:x}", self.hmenu);
-                DestroyMenu(self.hmenu);
+                _ = DestroyMenu(self.hmenu);
             } else {
                 // debug!("Menu::drop: menu has been taken");
             }
@@ -20,7 +20,7 @@ impl Drop for Menu {
 impl Menu {
     pub(crate) fn extract(mut self) -> HMENU {
         let hmenu = self.hmenu;
-        self.hmenu = HMENU(0);
+        self.hmenu = HMENU(null_mut());
         hmenu
     }
 
@@ -41,7 +41,7 @@ impl Menu {
     pub fn track_popup_menu(&self, form: &Form, x: i32, y: i32) {
         unsafe {
             let flags = TRACK_POPUP_MENU_FLAGS(0);
-            if TrackPopupMenu(self.hmenu, flags, x, y, 0, form.handle.get(), None).into() {
+            if TrackPopupMenu(self.hmenu, flags, x, y, None, form.handle.get(), None).into() {
                 debug!("TrackPopupMenu succeeded");
             } else {
                 // debug!("TrackPopupMenu failed");
@@ -142,12 +142,7 @@ impl<'a> SetItem<'a> {
             item.fMask = MIIM_STATE;
             item.fState = new_state;
             // trace!("setting menu item state: new_state 0x{:x}", new_state);
-            if bool::from(SetMenuItemInfoW(
-                self.menu.hmenu,
-                self.item,
-                self.by_position,
-                &item,
-            )) {
+            if SetMenuItemInfoW(self.menu.hmenu, self.item, self.by_position, &item).is_ok() {
                 // let readback_state = self.get_state();
                 // trace!("readback state: 0x{:x}", readback_state);
             } else {

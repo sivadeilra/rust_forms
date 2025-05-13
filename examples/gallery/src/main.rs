@@ -1,6 +1,6 @@
 use forms::{grid::*, *};
-use log::debug;
 use std::rc::Rc;
+use tracing::debug;
 
 mod list_view;
 
@@ -10,7 +10,9 @@ const IDC_DEMO_TAB_CONTROL: ControlId = ControlId(3);
 const IDC_DEMO_BUTTONS: ControlId = ControlId(4);
 
 fn main() {
-    env_logger::builder().format_timestamp(None).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let form = Form::builder()
         .size(1024, 768)

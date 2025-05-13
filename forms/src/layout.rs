@@ -7,11 +7,10 @@ pub use stack::{Orientation, StackLayout};
 
 #[derive(Debug)]
 pub enum Layout {
-    /// The application must explicitly set the position and size of each
-    /// control.
-    #[cfg(nope)]
-    Fixed(fixed::FixedLayout),
-
+    // /// The application must explicitly set the position and size of each
+    // /// control.
+    // #[cfg(nope)]
+    // Fixed(fixed::FixedLayout),
     /// Child nodes are placed in a grid. The application specifies the size
     /// of each row and column of the grid, and places controls into specific
     /// rows and columns. Grid layout then computes the size and position of
@@ -121,7 +120,14 @@ impl DeferredLayoutPlacer {
 
 impl LayoutPlacer for DeferredLayoutPlacer {
     fn place_control(&mut self, control: &ControlState, x: i32, y: i32, width: i32, height: i32) {
-        self.op
-            .defer(control.handle(), HWND(0), x, y, width, height, SWP_NOZORDER);
+        self.op.defer(
+            control.handle(),
+            HWND(null_mut()),
+            x,
+            y,
+            width,
+            height,
+            SWP_NOZORDER,
+        );
     }
 }

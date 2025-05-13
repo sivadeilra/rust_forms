@@ -125,7 +125,7 @@ pub struct MessagePump {
 impl MessagePump {
     pub fn get(&mut self) -> Result<Option<Msg<'_>>, Error> {
         unsafe {
-            let status = GetMessageW(&mut self.msg, HWND(0), 0, 0).0;
+            let status = GetMessageW(&mut self.msg, None, 0, 0).0;
             if status < 0 {
                 Err(Error::Windows(GetLastError()))
             } else if status == 0 {
