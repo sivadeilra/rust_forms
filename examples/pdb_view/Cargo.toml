@@ -1,0 +1,13 @@
+[package]
+name = "pdb_view"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+forms.workspace = true
+ms-pdb = "0.1.13"
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+forms_build.workspace = true

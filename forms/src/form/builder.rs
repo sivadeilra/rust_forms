@@ -1,93 +1,61 @@
 use super::*;
 use windows::core::w;
 
-pub struct FormBuilder<'a> {
-    args: Box<FormArgs<'a>>,
+pub struct FormBuilder {
+    pub(crate) app: App,
+    pub(crate) title: Option<String>,
+    pub(crate) size: Option<(i32, i32)>,
+    pub(crate) parent: Option<Form>,
+    pub(crate) quit_on_close: Option<i32>,
+    pub(crate) style: Option<Rc<Style>>,
 }
 
-struct FormArgs<'a> {
-    text: Option<&'a str>,
-    size: Option<(i32, i32)>,
-    parent: Option<&'a Form>,
-    quit_on_close: Option<i32>,
-    style: Option<Rc<Style>>,
-}
+impl FormBuilder {
+    // pub fn parent(&mut self, parent: &Form) -> &mut Self {
+    //     self.args.parent = Some(parent);
+    //     self
+    // }
 
-impl<'a> Default for FormBuilder<'a> {
-    fn default() -> Self {
-        Self {
-            args: Box::new(FormArgs {
-                text: None,
-                size: None,
-                parent: None,
-                quit_on_close: Some(0),
-                style: None,
-            }),
-        }
-    }
-}
-
-impl<'a> FormBuilder<'a> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn parent(&mut self, parent: &'a Form) -> &mut Self {
-        self.args.parent = Some(parent);
-        self
-    }
-
-    pub fn text(&mut self, text: &'a str) -> &mut Self {
-        self.args.text = Some(text);
+    pub fn title(&mut self, text: &str) -> &mut Self {
+        self.title = Some(text.to_string());
         self
     }
 
     pub fn size(&mut self, w: i32, h: i32) -> &mut Self {
-        self.args.size = Some((w, h));
+        self.size = Some((w, h));
         self
     }
 
     pub fn quit_on_close(&mut self) -> &mut Self {
-        self.args.quit_on_close = Some(0);
+        self.quit_on_close = Some(0);
         self
     }
 
     pub fn quit_on_close_with(&mut self, exit_code: i32) -> &mut Self {
-        self.args.quit_on_close = Some(exit_code);
+        self.quit_on_close = Some(exit_code);
         self
     }
 
     pub fn no_quit_on_close(&mut self) -> &mut Self {
-        self.args.quit_on_close = None;
+        self.quit_on_close = None;
         self
     }
 
     pub fn style(&mut self, style: Rc<Style>) -> &mut Self {
-        self.args.style = Some(style);
+        self.style = Some(style);
         self
     }
 
-    pub fn build(&mut self) -> Rc<Form> {
+    pub fn build(&mut self) -> Form {
         crate::init::init_common_controls();
 
-        let style = if let Some(s) = self.args.style.take() {
+        let style = if let Some(s) = self.style.take() {
             s
         } else {
             Rc::new(Style::default())
         };
 
         unsafe {
-            let co_initialized = match CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() {
-                Ok(()) => {
-                    debug!("CoInitializeEx succeeded");
-                    true
-                }
-                Err(_) => {
-                    warn!("CoInitializeEx failed");
-                    false
-                }
-            };
-
             let window_class_atom = register_class_lazy();
             let instance = get_instance();
 
@@ -95,7 +63,7 @@ impl<'a> FormBuilder<'a> {
 
             let window_name_wstr: U16CString;
             let mut window_name_pwstr = PCWSTR::null();
-            if let Some(text) = self.args.text {
+            if let Some(text) = &self.title {
                 window_name_wstr = U16CString::from_str(text).unwrap();
                 window_name_pwstr = PCWSTR::from_raw(window_name_wstr.as_ptr());
             }
@@ -103,17 +71,17 @@ impl<'a> FormBuilder<'a> {
             let mut width = CW_USEDEFAULT;
             let mut height = CW_USEDEFAULT;
 
-            if let Some((w, h)) = self.args.size {
+            if let Some((w, h)) = self.size {
                 width = w;
                 height = h;
             }
 
-            let form_alloc: Rc<Form> = Rc::new(Form {
-                co_initialized,
+            let form_alloc: Rc<FormState> = Rc::new(FormState {
+                app: self.app.clone(),
                 stuck: StuckToThread::new(),
                 control: Default::default(),
                 handle: Cell::new(HWND(null_mut())),
-                quit_on_close: self.args.quit_on_close,
+                quit_on_close: self.quit_on_close,
                 is_layout_valid: Cell::new(false),
                 layout: RefCell::new(None),
                 layout_min_size: Cell::new((0, 0)),
@@ -126,9 +94,9 @@ impl<'a> FormBuilder<'a> {
                 style,
             });
 
-            let form_alloc_ptr: *const Form = &*form_alloc;
+            let form_alloc_ptr: *const FormState = &*form_alloc;
 
-            let parent_window_handle: Option<HWND> = if let Some(parent) = self.args.parent {
+            let parent_window_handle: Option<HWND> = if let Some(parent) = &self.parent {
                 Some(parent.handle())
             } else {
                 None
@@ -221,7 +189,7 @@ impl<'a> FormBuilder<'a> {
             }
             */
 
-            form_alloc
+            Form { rc: form_alloc }
         }
     }
 }

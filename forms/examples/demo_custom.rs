@@ -3,9 +3,12 @@ use forms::*;
 use std::cell::Cell;
 
 pub fn main() {
-    let form = Form::builder()
+    let app = forms::App::new();
+
+    let form = app
+        .form_builder()
         .size(1024, 768)
-        .text("Custom Control Demo")
+        .title("Custom Control Demo")
         .build();
 
     let custom = CustomControl::new(

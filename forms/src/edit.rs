@@ -21,11 +21,11 @@ impl core::ops::Deref for Edit {
 }
 
 impl Edit {
-    pub fn new(parent: &Rc<Form>) -> Rc<Edit> {
+    pub fn new(parent: &Form) -> Rc<Edit> {
         Self::new_with_options(parent, Default::default())
     }
 
-    pub fn new_with_options(form: &Rc<Form>, options: EditOptions) -> Rc<Edit> {
+    pub fn new_with_options(form: &Form, options: EditOptions) -> Rc<Edit> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
             let ex_style = WINDOW_EX_STYLE(0);
@@ -68,7 +68,7 @@ impl Edit {
             let control = ControlState::new(handle);
             let this = Rc::new(Edit { control });
 
-            this.set_font(&form.style.edit_font);
+            this.set_font(&form.rc.style.edit_font);
 
             this
         }

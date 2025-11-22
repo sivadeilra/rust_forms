@@ -13,10 +13,15 @@ mod builder;
 pub use builder::*;
 
 /// A top-level window.
+#[derive(Clone)]
 pub struct Form {
-    stuck: StuckToThread,
+    pub(crate) rc: Rc<FormState>,
+}
 
-    co_initialized: bool,
+pub(crate) struct FormState {
+    pub(crate) app: App,
+
+    stuck: StuckToThread,
 
     pub(crate) control: OnceCell<ControlState>,
     pub(crate) handle: Cell<HWND>,
@@ -56,23 +61,23 @@ pub(crate) trait MessageHandlerTrait: 'static {
 impl std::ops::Deref for Form {
     type Target = ControlState;
     fn deref(&self) -> &Self::Target {
-        self.control.get().unwrap()
+        self.rc.control.get().unwrap()
     }
 }
 
 impl Form {
-    pub fn builder<'a>() -> FormBuilder<'a> {
-        FormBuilder::default()
+    pub fn app(&self) -> &App {
+        &self.rc.app
     }
 
     pub(crate) fn handle(&self) -> HWND {
         self.stuck.check();
-        self.handle.get()
+        self.rc.handle.get()
     }
 
     pub fn show_window(&self) {
         self.stuck.check();
-        self.ensure_layout_valid();
+        self.rc.ensure_layout_valid();
         unsafe {
             _ = ShowWindow(self.handle(), SW_SHOW);
         }
@@ -80,11 +85,11 @@ impl Form {
 
     pub fn set_title(&self, text: &str) {
         self.stuck.check();
-        set_window_text(self.handle.get(), text);
+        set_window_text(self.rc.handle.get(), text);
     }
 
     pub fn style(&self) -> &Style {
-        &self.style
+        &self.rc.style
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
@@ -92,11 +97,11 @@ impl Form {
         unsafe {
             if let Some(menu) = menu {
                 let hmenu = menu.extract();
-                if SetMenu(self.handle.get(), Some(hmenu)).is_err() {
+                if SetMenu(self.rc.handle.get(), Some(hmenu)).is_err() {
                     warn!("failed to set menu for form: {:?}", GetLastError());
                 }
             } else {
-                if SetMenu(self.handle.get(), None).is_ok() {
+                if SetMenu(self.rc.handle.get(), None).is_ok() {
                     trace!("cleared menu for form");
                 } else {
                     warn!("failed to clear menu for form");
@@ -105,21 +110,21 @@ impl Form {
         }
     }
 
-    pub fn create_status_bar(self: &Rc<Self>) -> Rc<StatusBar> {
+    pub fn create_status_bar(&self) -> Rc<StatusBar> {
         self.stuck.check();
-        let sb = if let Some(sb) = self.status_bar.take() {
+        let sb = if let Some(sb) = self.rc.status_bar.take() {
             sb
         } else {
             StatusBar::new(self)
         };
-        self.status_bar.set(Some(sb.clone()));
+        self.rc.status_bar.set(Some(sb.clone()));
         sb
     }
 
     pub fn get_status_bar(&self) -> Option<Rc<StatusBar>> {
         self.stuck.check();
-        if let Some(sb) = self.status_bar.take() {
-            self.status_bar.set(Some(sb.clone()));
+        if let Some(sb) = self.rc.status_bar.take() {
+            self.rc.status_bar.set(Some(sb.clone()));
             Some(sb)
         } else {
             None
@@ -147,7 +152,7 @@ impl Form {
     where
         F: Fn(ControlId, Command) + 'static,
     {
-        let result = self.command_handler.set(Box::new(handler));
+        let result = self.rc.command_handler.set(Box::new(handler));
         assert!(
             result.is_ok(),
             "cannot call command_handler() more than once"
@@ -158,7 +163,7 @@ impl Form {
     where
         F: Fn(&Notify) + 'static,
     {
-        let result = self.notify_handler.set(Box::new(handler));
+        let result = self.rc.notify_handler.set(Box::new(handler));
         assert!(
             result.is_ok(),
             "cannot call notify_handler() more than once"
@@ -166,7 +171,7 @@ impl Form {
     }
 }
 
-impl Form {
+impl FormState {
     pub(crate) fn invalidate_layout(&self) {
         self.stuck.check();
         self.is_layout_valid.set(false);
@@ -226,19 +231,19 @@ impl Form {
             }
         }
     }
-
-    pub fn set_layout(&self, layout: Layout) {
-        self.stuck.check();
-        let mut layout_borrow = self.layout.borrow_mut();
-        *layout_borrow = Some(layout);
-        drop(layout_borrow);
-
-        self.invalidate_layout();
-        self.ensure_layout_valid();
-    }
 }
 
 impl Form {
+    pub fn set_layout(&self, layout: Layout) {
+        self.stuck.check();
+        let mut layout_borrow = self.rc.layout.borrow_mut();
+        *layout_borrow = Some(layout);
+        drop(layout_borrow);
+
+        self.rc.invalidate_layout();
+        self.rc.ensure_layout_valid();
+    }
+
     pub fn show_modal(&self) {
         self.show_modal_under(None)
     }
@@ -366,7 +371,7 @@ extern "system" fn form_wndproc(
             return DefWindowProcW(window, message, wparam, lparam);
         }
 
-        let state: &Form = &*(state_ptr as *const Form);
+        let state: &FormState = &*(state_ptr as *const FormState);
 
         match message {
             wm::WM_PAINT => {
@@ -539,16 +544,12 @@ fn wparam_hiword(wp: WPARAM) -> u16 {
     (wp.0 >> 16) as u16
 }
 
-impl Drop for Form {
+impl Drop for FormState {
     fn drop(&mut self) {
         self.stuck.check();
 
         unsafe {
             _ = DestroyWindow(self.handle.get());
-
-            if self.co_initialized {
-                CoUninitialize();
-            }
         }
     }
 }

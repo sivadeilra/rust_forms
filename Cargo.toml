@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
     "examples/gallery",
-    "examples/hello",
+    "examples/hello", "examples/pdb_view",
     "forms",
     "forms_build",
 ]
@@ -13,6 +13,9 @@ widestring = "1.0.2"
 static_assertions = "1.0"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-windows = "0.61.1"
+windows = "0.62.2"
 windows-sys = "0.59.0"
 tokio = "1.45.0"
+
+forms = { path = "forms" }
+forms_build = { path = "forms_build" }

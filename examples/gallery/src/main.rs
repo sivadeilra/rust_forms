@@ -1,5 +1,4 @@
 use forms::{grid::*, *};
-use std::rc::Rc;
 use tracing::debug;
 
 mod list_view;
@@ -14,10 +13,13 @@ fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let form = Form::builder()
+    let app = forms::App::new();
+
+    let form = app
+        .form_builder()
         .size(1024, 768)
         .quit_on_close()
-        .text("Gallery")
+        .title("Gallery")
         .build();
 
     form.set_layout(Layout::Grid(GridLayout {
@@ -75,24 +77,23 @@ fn main() {
         ],
     }));
 
-    let real_form = form;
+    form.command_handler({
+        let form = form.clone();
+        Box::new(move |control, command| match (control, command) {
+            (IDC_DEMO_TREE_VIEW, Command::ButtonClicked) => {
+                debug!("demoing tree view");
+            }
 
-    let form = Rc::clone(&real_form);
+            (IDC_DEMO_LIST_VIEW, Command::ButtonClicked) => {
+                debug!("demoing list view");
+                list_view::demo_list_view(&form);
+            }
 
-    real_form.command_handler(Box::new(move |control, command| match (control, command) {
-        (IDC_DEMO_TREE_VIEW, Command::ButtonClicked) => {
-            debug!("demoing tree view");
-        }
+            _ => {
+                debug!("command handler: {control:?} {command:?}");
+            }
+        })
+    });
 
-        (IDC_DEMO_LIST_VIEW, Command::ButtonClicked) => {
-            debug!("demoing list view");
-            list_view::demo_list_view(&form);
-        }
-
-        _ => {
-            debug!("command handler: {control:?} {command:?}");
-        }
-    }));
-
-    real_form.show_modal();
+    form.show_modal();
 }

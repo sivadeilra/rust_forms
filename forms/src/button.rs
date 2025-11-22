@@ -14,7 +14,7 @@ impl core::ops::Deref for Button {
 }
 
 pub struct ButtonBuilder<'a> {
-    form: &'a Rc<Form>,
+    form: &'a Form,
     parent: Option<&'a ControlState>,
     id: ControlId,
     kind: Option<ButtonKind>,
@@ -81,11 +81,11 @@ impl CheckState {
 }
 
 impl Button {
-    pub fn new(form: &Rc<Form>, id: ControlId) -> Rc<Button> {
+    pub fn new(form: &Form, id: ControlId) -> Rc<Button> {
         Self::builder(form, id).build()
     }
 
-    pub fn builder(form: &Rc<Form>, id: ControlId) -> ButtonBuilder {
+    pub fn builder(form: &Form, id: ControlId) -> ButtonBuilder<'_> {
         ButtonBuilder {
             form,
             id,
@@ -144,8 +144,7 @@ impl Button {
                 this.set_text(text);
             }
 
-            // let hbr = GetSysColorBrush(SYS_COLOR_INDEX(COLOR_BACKGROUND.0 + 1));
-            let hbr = CreateSolidBrush(COLORREF(0xe0_ff_00_ff));
+            let hbr = builder.form.rc.app.state.button_background_brush;
             SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, hbr.0 as _);
 
             this

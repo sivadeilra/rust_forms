@@ -37,7 +37,7 @@ impl TreeView {
         self.control.set_window_style(new_style);
     }
 
-    pub fn new(form: &Rc<Form>, options: &TreeViewOptions) -> Rc<TreeView> {
+    pub fn new(form: &Form, options: &TreeViewOptions) -> Rc<TreeView> {
         unsafe {
             let parent_window = form.handle();
             let class_name_wstr = WCString::from_str_truncate(WC_TREEVIEW);
@@ -82,7 +82,7 @@ impl TreeView {
             )
             .unwrap();
 
-            form.invalidate_layout();
+            form.rc.invalidate_layout();
 
             Rc::new(TreeView {
                 control: ControlState::new(hwnd),

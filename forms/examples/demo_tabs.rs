@@ -10,9 +10,12 @@ pub fn main() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    let form = Form::builder()
+    let app = forms::App::new();
+
+    let form = app
+        .form_builder()
         .size(1024, 768)
-        .text("Tab Control Demo")
+        .title("Tab Control Demo")
         .build();
 
     let tab_control = TabControl::new(&form);

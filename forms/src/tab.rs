@@ -43,7 +43,7 @@ impl core::ops::Deref for TabControl {
 }
 
 impl TabControl {
-    pub fn new(parent: &Rc<Form>) -> Rc<Self> {
+    pub fn new(parent: &Form) -> Rc<Self> {
         register_class_lazy();
 
         unsafe {
@@ -82,7 +82,7 @@ impl TabControl {
                 );
             }
 
-            parent.tab_controls.borrow_mut().push(Rc::downgrade(&rc));
+            parent.rc.tab_controls.borrow_mut().push(Rc::downgrade(&rc));
 
             rc
         }

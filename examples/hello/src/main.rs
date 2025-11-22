@@ -20,15 +20,19 @@ struct AppState {
 }
 
 const CONTROL_ID_QUERY_BUTTON: ControlId = ControlId(1);
-const CONTROL_ID_ROOT_DIRECTORY: ControlId = ControlId(2);
-const CONTROL_ID_REGEX: ControlId = ControlId(3);
+//const CONTROL_ID_ROOT_DIRECTORY: ControlId = ControlId(2);
+//const CONTROL_ID_REGEX: ControlId = ControlId(3);
 
 fn main() {
-    let form = Form::builder()
+    let app = forms::App::new();
+
+    let form = app
+        .form_builder()
         .size(1600, 1200)
         .quit_on_close()
-        .text("Search in Files")
+        .title("Search in Files")
         .build();
+
     // form.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
     // form.set_default_button_font(Font::builder("Segoe UI", 24).build().ok());
 

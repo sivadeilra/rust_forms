@@ -1,10 +1,12 @@
 use super::*;
 
 pub fn demo_list_view(parent: &Form) {
-    let form = Form::builder()
-        .parent(parent)
+    let form = parent
+        .app()
+        .form_builder()
+        // .parent(parent)
         .size(1024, 768)
-        .text("List View")
+        .title("List View")
         .build();
 
     let lv = ListView::new(&form);

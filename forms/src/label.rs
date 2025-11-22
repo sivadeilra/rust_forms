@@ -12,7 +12,7 @@ impl core::ops::Deref for Label {
 }
 
 impl Label {
-    pub fn new(form: &Rc<Form>) -> Rc<Self> {
+    pub fn new(form: &Form) -> Rc<Self> {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
@@ -39,7 +39,7 @@ impl Label {
                 control: ControlState::new(hwnd),
             };
 
-            this.set_font(&form.style.static_font);
+            this.set_font(&form.rc.style.static_font);
 
             Rc::new(this)
         }

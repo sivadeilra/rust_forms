@@ -8,7 +8,13 @@ const IDC_HAS_LINES: ControlId = ControlId(5);
 const IDC_CHECKBOXES: ControlId = ControlId(6);
 
 pub fn main() {
-    let form = Form::builder().size(1024, 768).text("List View").build();
+    let app = forms::App::new();
+
+    let form = app
+        .form_builder()
+        .size(1024, 768)
+        .title("List View")
+        .build();
 
     let tv = TreeView::new(
         &form,

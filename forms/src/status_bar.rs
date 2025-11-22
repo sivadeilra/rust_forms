@@ -16,7 +16,7 @@ impl core::ops::Deref for StatusBar {
 const STATUSCLASSNAME: &str = "msctls_statusbar32";
 
 impl StatusBar {
-    pub fn new(form: &Rc<Form>) -> Rc<Self> {
+    pub fn new(form: &Form) -> Rc<Self> {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
@@ -44,7 +44,7 @@ impl StatusBar {
                 Some(LPARAM(0)),
             );
 
-            form.invalidate_layout();
+            form.rc.invalidate_layout();
             state
         }
     }

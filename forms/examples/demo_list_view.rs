@@ -9,7 +9,8 @@ const IDC_CHECKBOXES: ControlId = ControlId(6);
 const IDC_GRIDLINES: ControlId = ControlId(7);
 
 pub fn main() {
-    let form = Form::builder().size(1024, 768).text("List View").build();
+    let app = forms::App::new();
+    let form = app.form_builder().size(1024, 768).title("List View").build();
 
     let lv = ListView::new(&form);
     lv.add_column(0, 120, "Stuff");
