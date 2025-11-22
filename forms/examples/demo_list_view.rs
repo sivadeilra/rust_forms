@@ -10,7 +10,11 @@ const IDC_GRIDLINES: ControlId = ControlId(7);
 
 pub fn main() {
     let app = forms::App::new();
-    let form = app.form_builder().size(1024, 768).title("List View").build();
+    let form = app
+        .form_builder()
+        .size(1024, 768)
+        .title("List View")
+        .build();
 
     let lv = ListView::new(&form);
     lv.add_column(0, 120, "Stuff");

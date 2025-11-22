@@ -89,7 +89,7 @@ impl FormBuilder {
                 background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
                 status_bar: Cell::new(None),
                 command_handler: Default::default(),
-                notify_handler: Default::default(),
+                // notify_handler: Default::default(),
                 tab_controls: Default::default(),
                 style,
             });

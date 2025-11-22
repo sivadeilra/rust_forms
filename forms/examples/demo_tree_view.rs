@@ -1,5 +1,6 @@
 use forms::*;
 use std::cell::Cell;
+use tracing::debug;
 
 const IDC_ADD_ROOT: ControlId = ControlId(2);
 const IDC_ADD_ITEM: ControlId = ControlId(3);
@@ -82,26 +83,51 @@ pub fn main() {
         ],
     }));
 
-    {
-        let tv = tv.clone();
-        form.command_handler(move |control, command| match (control, command) {
-            (IDC_ADD_ROOT, Command::ButtonClicked) => {
+    form.show();
+
+    while let Some(event) = app.wait_event() {
+        match event {
+            AppEvent::Quit => break,
+
+            AppEvent::Notify {
+                control: IDC_ADD_ROOT,
+                notify: Notify::ButtonClicked,
+            } => {
                 let item_name = format!("{}", get_next_item());
                 tv.insert_root(&item_name);
             }
 
-            (IDC_DELETE_ITEM, Command::ButtonClicked) => {}
-            (IDC_HAS_LINES, Command::ButtonClicked) => {
+            AppEvent::Notify {
+                control: IDC_DELETE_ITEM,
+                notify: Notify::ButtonClicked,
+            } => {
+                debug!("IDC_DELETE_ITEM");
+            }
+
+            AppEvent::Notify {
+                control: IDC_HAS_LINES,
+                notify: Notify::ButtonClicked,
+            } => {
                 tv.set_has_lines(has_lines_button.is_checked());
             }
 
-            (IDC_CHECKBOXES, Command::ButtonClicked) => {
+            AppEvent::Notify {
+                control: IDC_CHECKBOXES,
+                notify: Notify::ButtonClicked,
+            } => {
                 tv.set_check_boxes(checkboxes_button.is_checked());
             }
 
-            _ => {}
-        });
+            AppEvent::Notify {
+                control: control_id,
+                notify,
+            } => {
+                debug!(
+                    control_id = control_id.0,
+                    ?notify,
+                    "unrecognized notification"
+                );
+            }
+        }
     }
-
-    form.show_modal();
 }

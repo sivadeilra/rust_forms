@@ -6,10 +6,6 @@ const IDC_DELETE_TAB: ControlId = ControlId(3);
 const IDC_ZAP: ControlId = ControlId(4);
 
 pub fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
-
     let app = forms::App::new();
 
     let form = app
@@ -114,10 +110,6 @@ pub fn main() {
             _ => {}
         });
     }
-
-    form.notify_handler(move |_notify: &Notify| {
-        // ...
-    });
 
     form.show_modal();
 }

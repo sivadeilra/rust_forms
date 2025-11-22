@@ -33,5 +33,14 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
-[dev-dependencies]
-tracing-subscriber.workspace = true
+[dependencies.tracing-subscriber]
+optional = true
+workspace = true
+features = ["fmt", "env-filter"]
+
+#[dev-dependencies]
+#tracing-subscriber.workspace = true
+
+[features]
+default = ["simple-tracing"]
+simple-tracing = ["tracing-subscriber"]

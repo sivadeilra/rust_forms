@@ -36,8 +36,7 @@ pub(crate) struct FormState {
     pub(crate) background_color: Cell<ColorRef>,
 
     command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
-    notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
-
+    // notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
     status_bar: Cell<Option<Rc<StatusBar>>>,
 
     pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControl>>>,
@@ -159,6 +158,7 @@ impl Form {
         );
     }
 
+    /*
     pub fn notify_handler<F>(&self, handler: F)
     where
         F: Fn(&Notify) + 'static,
@@ -169,6 +169,7 @@ impl Form {
             "cannot call notify_handler() more than once"
         );
     }
+    */
 }
 
 impl FormState {
@@ -365,13 +366,15 @@ extern "system" fn form_wndproc(
             _ => {}
         }
 
-        let state_ptr: isize = GetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0));
-        if state_ptr == 0 {
+        let form_ptr: isize = GetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0));
+        if form_ptr == 0 {
             debug!("form_wndproc: lparam is null, msg {:04x}", message);
             return DefWindowProcW(window, message, wparam, lparam);
         }
 
-        let state: &FormState = &*(state_ptr as *const FormState);
+        let form: &FormState = &*(form_ptr as *const FormState);
+
+        let app: &App = &form.app;
 
         match message {
             wm::WM_PAINT => {
@@ -387,7 +390,7 @@ extern "system" fn form_wndproc(
             }
 
             wm::WM_CLOSE => {
-                if let Some(exit_code) = state.quit_on_close {
+                if let Some(exit_code) = form.quit_on_close {
                     debug!("WM_CLOSE: posting quit message");
                     post_quit_message(exit_code);
                 } else {
@@ -405,13 +408,13 @@ extern "system" fn form_wndproc(
                 let new_height = ((lparam.0 >> 16) & 0xffff) as u32;
                 trace!("WM_SIZE: {} x {}", new_width, new_height);
 
-                if let Some(sb) = state.status_bar.take() {
-                    state.status_bar.set(Some(sb.clone()));
+                if let Some(sb) = form.status_bar.take() {
+                    form.status_bar.set(Some(sb.clone()));
                     SendMessageW(sb.handle(), WM_SIZE, None, None);
                 }
 
-                state.invalidate_layout();
-                state.ensure_layout_valid();
+                form.invalidate_layout();
+                form.ensure_layout_valid();
 
                 // return 0;
             }
@@ -422,7 +425,21 @@ extern "system" fn form_wndproc(
                 let control = ControlId(wparam_loword(wparam));
                 let command = Command(wparam_hiword(wparam) as u32);
 
-                if let Some(handler) = state.command_handler.get() {
+                match command.0 {
+                    wm::BN_CLICKED => {
+                        debug!("BN_CLICKED");
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ButtonClicked,
+                        });
+                    }
+
+                    _ => {
+                        debug!("unrecognized WM_COMMAND code: {:#4x}", command.0);
+                    }
+                }
+
+                if let Some(handler) = form.command_handler.get() {
                     handler(control, command);
                 } else {
                     debug!("WM_COMMAND: no handler is installed");
@@ -436,12 +453,12 @@ extern "system" fn form_wndproc(
                 let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
                 let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
                 let notify_code = (*nmhdr_ptr).code;
-                let notify = Notify::from_nmhdr(nmhdr_ptr);
+                // let notify = Notify::from_nmhdr(nmhdr_ptr);
 
                 // For some notifications, we need to handle the notification directly.
                 match notify_code {
                     TCN_SELCHANGE => {
-                        let tab_controls = state.tab_controls.borrow();
+                        let tab_controls = form.tab_controls.borrow();
                         for weak_tab_control in tab_controls.iter() {
                             if let Some(tab_control) = weak_tab_control.upgrade() {
                                 // TODO: check that this is the right tab control
@@ -452,16 +469,18 @@ extern "system" fn form_wndproc(
                     _ => {}
                 }
 
+                /*
                 if let Some(handler) = state.notify_handler.get() {
                     handler(&notify);
                 } else {
                     debug!("no WM_NOTIFY handler installed");
                 }
+                */
             }
 
             // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
             wm::WM_SIZING => {
-                let (min_width, min_height) = state.layout_min_size.get();
+                let (min_width, min_height) = form.layout_min_size.get();
                 let window_size: &mut RECT = &mut *(lparam.0 as *mut RECT);
                 let height = window_size.bottom - window_size.top;
 
@@ -512,12 +531,12 @@ extern "system" fn form_wndproc(
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
             wm::WM_CTLCOLORSTATIC => {
                 let hdc = HDC(wparam.0 as _);
-                let brush_opt = state.background_brush.take();
+                let brush_opt = form.background_brush.take();
                 if let Some(brush) = brush_opt.as_ref() {
                     let hbrush = brush.handle();
                     SelectObject(hdc, HGDIOBJ(hbrush.0));
-                    state.background_brush.set(brush_opt);
-                    SetBkColor(hdc, COLORREF(state.background_color.get().as_u32()));
+                    form.background_brush.set(brush_opt);
+                    SetBkColor(hdc, COLORREF(form.background_color.get().as_u32()));
                     return LRESULT(hbrush.0 as _);
                 }
 
