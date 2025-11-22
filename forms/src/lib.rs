@@ -157,17 +157,17 @@ pub(crate) fn get_instance() -> HINSTANCE {
     }
 }
 
-pub fn with<T, F: FnMut(&mut T)>(mut value: T, mut f: F) -> T {
-    f(&mut value);
-    value
-}
-
 pub trait With {
     fn with<F: FnMut(&mut Self)>(mut self, mut f: F) -> Self
     where
         Self: Sized,
     {
         f(&mut self);
+        self
+    }
+
+    fn with_mut<F: FnOnce(&mut Self)>(&mut self, f: F) -> &mut Self {
+        f(self);
         self
     }
 }

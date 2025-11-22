@@ -133,11 +133,11 @@ impl TreeView {
         self.set_ex_style_flag(TVS_EX_DOUBLEBUFFER, value);
     }
 
-    pub fn insert_root(self: &Rc<Self>, item: &str) -> Result<TreeNode> {
+    pub fn insert_root(self: &Rc<Self>, item: &str) -> TreeNode {
         self.insert_at(TVI_ROOT, item)
     }
 
-    fn insert_at(self: &Rc<Self>, parent_hitem: HTREEITEM, text: &str) -> Result<TreeNode> {
+    fn insert_at(self: &Rc<Self>, parent_hitem: HTREEITEM, text: &str) -> TreeNode {
         unsafe {
             let mut item: TVINSERTSTRUCTW = zeroed();
             item.hParent = parent_hitem;
@@ -160,7 +160,10 @@ impl TreeView {
                 .0,
             );
             if hitem.0 == 0 {
-                return Err(Error::Windows(GetLastError()));
+                panic!(
+                    "TVM_INSERTITEM failed: {:?}",
+                    Error::Windows(GetLastError())
+                );
             }
 
             let state = Rc::new(NodeState {
@@ -174,10 +177,10 @@ impl TreeView {
                 items.insert(hitem.0, Rc::clone(&state));
             }
 
-            Ok(TreeNode {
+            TreeNode {
                 tree: Rc::clone(self),
                 state,
-            })
+            }
         }
     }
 }
@@ -199,11 +202,8 @@ struct NodeState {
 }
 
 impl TreeNode {
-    pub fn insert_child(&self, item: &str) -> Result<TreeNode> {
-        if self.state.deleted.get() {
-            return Err(Error::ItemDeleted);
-        }
-
+    pub fn insert_child(&self, item: &str) -> TreeNode {
+        assert!(!self.state.deleted.get(), "parent item was deleted");
         self.tree.insert_at(self.state.hitem, item)
     }
 

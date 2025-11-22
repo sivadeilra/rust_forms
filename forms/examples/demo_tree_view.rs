@@ -10,11 +10,9 @@ const IDC_CHECKBOXES: ControlId = ControlId(6);
 pub fn main() {
     let app = forms::App::new();
 
-    let form = app
-        .form_builder()
-        .size(1024, 768)
-        .title("List View")
-        .build();
+    let form = app.form_builder().size(1024, 768).build().with(|f| {
+        f.set_title("List View");
+    });
 
     let tv = TreeView::new(
         &form,
@@ -32,32 +30,34 @@ pub fn main() {
         i
     };
 
-    let hello = tv.insert_root("Hello!").unwrap();
-    hello.insert_child("Bonjour").unwrap();
-    hello.insert_child("Hola").unwrap();
-    hello.insert_child("Goddag").unwrap();
-    hello.insert_child("Salve").unwrap();
-    let world = tv.insert_root("World!").unwrap();
-    world.insert_child("Monde").unwrap();
+    let hello = tv.insert_root("Hello!");
+    hello.insert_child("Bonjour");
+    hello.insert_child("Hola");
+    hello.insert_child("Goddag");
+    hello.insert_child("Salve");
+    let world = tv.insert_root("World!");
+    world.insert_child("Monde");
 
     hello.expand();
     world.expand();
 
     let has_lines_button = Button::builder(&form, IDC_HAS_LINES)
-        .text("Show lines")
         .kind(ButtonKind::AutoCheckBox)
-        .build();
+        .build()
+        .with(|b| b.set_text("Show lines"));
 
-    let add_root = Button::builder(&form, IDC_ADD_ROOT)
-        .text("Add root")
-        .build();
+    let add_root = Button::builder(&form, IDC_ADD_ROOT).build().with(|b| {
+        b.set_text("Add root");
+    });
 
-    let add_item = Button::builder(&form, IDC_ADD_ITEM)
-        .text("Add item")
-        .build();
+    let add_item = Button::builder(&form, IDC_ADD_ITEM).build().with(|b| {
+        b.set_text("Add item");
+        b.set_enabled(false);
+    });
 
-    let delete_item = Button::new(&form, IDC_DELETE_ITEM);
-    delete_item.set_text("Delete item");
+    let delete_item = Button::new(&form, IDC_DELETE_ITEM).with(|b| {
+        b.set_text("Delete item");
+    });
 
     let checkboxes_button = Button::builder(&form, IDC_CHECKBOXES)
         .kind(ButtonKind::AutoCheckBox)
@@ -73,8 +73,6 @@ pub fn main() {
             .control(checkboxes_button.clone()),
     );
 
-    add_item.set_enabled(false);
-
     form.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis::new().fixed(50).auto().fixed(50),
         cols: GridAxis::new().auto_min(300).fixed(200),
@@ -89,7 +87,7 @@ pub fn main() {
         form.command_handler(move |control, command| match (control, command) {
             (IDC_ADD_ROOT, Command::ButtonClicked) => {
                 let item_name = format!("{}", get_next_item());
-                tv.insert_root(&item_name).unwrap();
+                tv.insert_root(&item_name);
             }
 
             (IDC_DELETE_ITEM, Command::ButtonClicked) => {}
