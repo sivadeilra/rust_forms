@@ -201,6 +201,8 @@ impl FormBuilder {
                 None
             };
 
+            let background_sys_color = SysColor::Window;
+
             let form_alloc: Rc<FormState> = Rc::new(FormState {
                 app: self.app.clone(),
                 stuck: StuckToThread::new(),
@@ -210,7 +212,7 @@ impl FormBuilder {
                 layout: RefCell::new(layout),
                 layout_min_size: Cell::new((0, 0)),
                 background_brush: Default::default(),
-                background_color: Cell::new(ColorRef::from_sys_color(SysColor::Window)),
+                background_color: Cell::new(ColorRef::from_sys_color(background_sys_color)),
                 status_bar: Cell::new(None),
                 command_handler: Default::default(),
                 tab_controls: Default::default(),
@@ -223,52 +225,9 @@ impl FormBuilder {
 
             SetWindowLongPtrW(handle, WINDOW_LONG_PTR_INDEX(0), form_alloc_ptr as isize);
 
-            let button_string = U16CString::from_str_truncate("BUTTON");
-            let htheme = OpenThemeData(Some(handle), PCWSTR::from_raw(button_string.as_ptr()));
-            if htheme.0 != 0 {
-                debug!("ooo, got theme data");
-
-                const BP_CHECKBOX: i32 = 3;
-                const CBS_CHECKEDNORMAL: i32 = 5;
-
-                let part = BP_CHECKBOX;
-                if let Ok(color) =
-                    GetThemeColor(htheme, part, CBS_CHECKEDNORMAL, THEME_PROPERTY_SYMBOL_ID(0))
-                {
-                    debug!("part {}, got theme color: 0x{:x}", part, color.0);
-                } else {
-                    warn!("part {}, failed to get theme color", part);
-                }
-
-                // dbg!(GetThemeSysColor(htheme, COLOR_MENUTEXT as i32));
-            } else {
-                warn!("failed to open theme data for window");
-            }
-
-            let htheme = GetWindowTheme(handle);
-
-            let mut logfont: LOGFONTW = zeroed();
-            match GetThemeSysFont(Some(htheme), TMT_STATUSFONT, &mut logfont) {
-                Ok(f) => {
-                    debug!(
-                        "GetThemeFont succeeded: {}",
-                        U16CString::from_ptr_str(logfont.lfFaceName.as_ptr()).to_string_lossy()
-                    );
-                    match Font::from_logfont(&logfont) {
-                        Ok(f) => {
-                            // form_alloc.default_static_font.set(Some(Rc::new(f)));
-                        }
-                        Err(_e) => {}
-                    }
-                    // Font::new(font_family, height)
-                }
-                Err(e) => {
-                    warn!("GetThemeFont: {}", e);
-                }
-            }
-
-            if let Ok(br) = Brush::from_sys_color(SysColor::Window) {
-                form_alloc.background_brush.set(Some(br));
+            if let Ok(br) = Brush::from_sys_color(background_sys_color) {
+                _ = SetClassLongPtrW(handle, GCLP_HBRBACKGROUND, br.handle().0 as isize);
+                *form_alloc.background_brush.borrow_mut() = Some(br);
             }
 
             _ = SendMessageW(handle, WM_THEMECHANGED, None, None);

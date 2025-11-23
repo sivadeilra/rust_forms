@@ -46,7 +46,7 @@ pub(crate) struct FormState {
 
     pub(crate) layout: RefCell<Option<Layout>>,
     pub(crate) style: Rc<Style>,
-    pub(crate) background_brush: Cell<Option<Brush>>,
+    pub(crate) background_brush: RefCell<Option<Brush>>,
     pub(crate) background_color: Cell<ColorRef>,
 
     command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
@@ -793,16 +793,27 @@ extern "system" fn form_wndproc(
             // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
             wm::WM_CTLCOLORSTATIC => {
                 let hdc = HDC(wparam.0 as _);
-                let brush_opt = form.background_brush.take();
-                if let Some(brush) = brush_opt.as_ref() {
+                let brush = form.background_brush.borrow();
+                if let Some(brush) = brush.as_ref() {
                     let hbrush = brush.handle();
                     SelectObject(hdc, HGDIOBJ(hbrush.0));
-                    form.background_brush.set(brush_opt);
                     SetBkColor(hdc, COLORREF(form.background_color.get().as_u32()));
                     return LRESULT(hbrush.0 as _);
                 }
 
                 return LRESULT(0);
+            }
+
+            wm::WM_ERASEBKGND => {
+                let mut client_rect: RECT = zeroed();
+                _ = GetClientRect(window, &mut client_rect);
+                let hdc = HDC(wparam.0 as _);
+                let brush = form.background_brush.borrow();
+                if let Some(brush) = brush.as_ref() {
+                    let hbrush = brush.handle();
+                    _ = FillRect(hdc, &client_rect, hbrush);
+                    return LRESULT(hbrush.0 as _);
+                }
             }
 
             // MDI frame events

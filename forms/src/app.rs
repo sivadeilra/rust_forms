@@ -5,6 +5,7 @@ use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::WindowsAndMessaging as wm;
 
 use crate::dbg::message_str;
+use crate::theme::ThemeData;
 
 use super::*;
 
@@ -87,8 +88,8 @@ impl App {
 
         Self {
             state: Rc::new(AppState {
-                button_background_brush: unsafe { CreateSolidBrush(COLORREF(0xe0_ff_00_ff)) },
                 event_queue: RefCell::new(VecDeque::new()),
+                theme: ThemeData::new(),
             }),
         }
     }
@@ -114,12 +115,11 @@ impl Default for App {
 }
 
 pub(crate) struct AppState {
-    pub(crate) button_background_brush: HBRUSH,
-
     /// This is a queue of events that we will report to the app. The events are written to this
     /// so that they can be processed safely _after_ we have exited the DispatchMessageW call.
     pub(crate) event_queue: RefCell<VecDeque<AppEvent>>,
     // pub(crate) window_state: RefCell<HashMap<isize, WindowState>>,
+    pub(crate) theme: ThemeData,
 }
 
 impl App {

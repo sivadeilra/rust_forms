@@ -151,7 +151,7 @@ impl Button {
                 this.set_text(text);
             }
 
-            let hbr = builder.form.rc.app.state.button_background_brush;
+            let hbr = builder.form.rc.app.state.theme.button_background_brush;
             SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, hbr.0 as _);
 
             this

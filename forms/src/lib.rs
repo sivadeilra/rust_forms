@@ -40,6 +40,7 @@ mod style;
 mod system_params;
 mod tab;
 pub mod tree_view;
+mod theme;
 
 pub use app::*;
 pub use brush::{Brush, SysColor};
