@@ -3,11 +3,14 @@ use windows::core::w;
 
 pub struct FormBuilder {
     pub(crate) app: App,
-    pub(crate) title: Option<String>,
+    pub(crate) title: String,
     pub(crate) size: Option<(i32, i32)>,
     pub(crate) parent: Option<Form>,
     pub(crate) quit_on_close: Option<i32>,
     pub(crate) style: Option<Rc<Style>>,
+
+    pub(crate) mdi_parent: Option<Form>,
+    pub(crate) mdi_mode: MdiMode,
 }
 
 impl FormBuilder {
@@ -16,8 +19,21 @@ impl FormBuilder {
     //     self
     // }
 
+    pub fn mdi_parent(&mut self, parent: &Form) -> &mut Self {
+        assert!(parent.rc.mdi_mode == MdiMode::Frame);
+        assert!(self.mdi_mode == MdiMode::None);
+        self.mdi_mode = MdiMode::Child;
+        self.mdi_parent = Some(parent.clone());
+        self
+    }
+
+    pub fn mdi_frame(&mut self) {
+        assert!(self.mdi_mode == MdiMode::None);
+        self.mdi_mode = MdiMode::Frame;
+    }
+
     pub fn title(&mut self, text: &str) -> &mut Self {
-        self.title = Some(text.to_string());
+        self.title = text.to_string();
         self
     }
 
@@ -46,10 +62,10 @@ impl FormBuilder {
         self
     }
 
-    pub fn build(&mut self) -> Form {
+    pub fn build(self) -> Form {
         crate::init::init_common_controls();
 
-        let style = if let Some(s) = self.style.take() {
+        let style = if let Some(s) = self.style {
             s
         } else {
             Rc::new(Style::default())
@@ -61,12 +77,8 @@ impl FormBuilder {
 
             let ex_style = WINDOW_EX_STYLE(0);
 
-            let window_name_wstr: U16CString;
-            let mut window_name_pwstr = PCWSTR::null();
-            if let Some(text) = &self.title {
-                window_name_wstr = U16CString::from_str(text).unwrap();
-                window_name_pwstr = PCWSTR::from_raw(window_name_wstr.as_ptr());
-            }
+            let window_name_wstr = U16CString::from_str_truncate(&self.title);
+            let window_name_pwstr = PCWSTR::from_raw(window_name_wstr.as_ptr());
 
             let mut width = CW_USEDEFAULT;
             let mut height = CW_USEDEFAULT;
@@ -92,9 +104,14 @@ impl FormBuilder {
                 // notify_handler: Default::default(),
                 tab_controls: Default::default(),
                 style,
+                mdi_mode: self.mdi_mode,
+                mdi_parent: self.mdi_parent,
+                mdi_client_hwnd: Cell::new(HWND(null_mut())),
             });
 
             let form_alloc_ptr: *const FormState = &*form_alloc;
+
+            debug!(?form_alloc_ptr, "creating form");
 
             let parent_window_handle: Option<HWND> = if let Some(parent) = &self.parent {
                 Some(parent.handle())
@@ -102,25 +119,122 @@ impl FormBuilder {
                 None
             };
 
-            let handle = match CreateWindowExW(
-                ex_style,
-                PCWSTR::from_raw(window_class_atom as usize as *const u16),
-                window_name_pwstr,
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                width,
-                height,
-                parent_window_handle,
-                None,
-                Some(instance),
-                Some(form_alloc_ptr as *const c_void as *mut c_void),
-            ) {
-                Ok(h) => h,
-                Err(e) => {
-                    panic!("Failed to create window: {e:?}");
+            let handle: HWND;
+
+            match self.mdi_mode {
+                MdiMode::None => {
+                    handle = match CreateWindowExW(
+                        ex_style,
+                        PCWSTR::from_raw(window_class_atom as usize as *const u16),
+                        window_name_pwstr,
+                        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                        CW_USEDEFAULT,
+                        CW_USEDEFAULT,
+                        width,
+                        height,
+                        parent_window_handle,
+                        None,
+                        Some(instance),
+                        Some(form_alloc_ptr as *const c_void as *mut c_void),
+                    ) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            panic!("Failed to create window: {e:?}");
+                        }
+                    };
                 }
-            };
+
+                MdiMode::Frame => {
+                    debug!("creating MDI frame window");
+                    let frame_class_atom = register_mdi_frame_class_lazy();
+                    handle = match CreateWindowExW(
+                        ex_style,
+                        PCWSTR::from_raw(frame_class_atom as usize as *const u16),
+                        window_name_pwstr,
+                        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                        CW_USEDEFAULT,
+                        CW_USEDEFAULT,
+                        width,
+                        height,
+                        parent_window_handle,
+                        None,
+                        Some(instance),
+                        Some(form_alloc_ptr as *const c_void as *mut c_void),
+                    ) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            panic!("Failed to create window: {e:?}");
+                        }
+                    };
+
+                    // Next, create the MDI client window. There is exactly one MDI client window
+                    // for each MDI frame. The MDI client window manages the CHILD windows.
+                    // (frame != client != child)
+
+                    let ccs = CLIENTCREATESTRUCT {
+                        hWindowMenu: HANDLE(null_mut()),
+                        idFirstChild: 100,
+                    };
+
+                    match CreateWindowExW(
+                        WINDOW_EX_STYLE(0), // ex_style
+                        w!("MDICLIENT"),
+                        // PCWSTR::from_raw(class_atom as usize as *const u16),
+                        window_name_pwstr,
+                        WS_CHILD | WS_CLIPCHILDREN | WS_VSCROLL | WS_HSCROLL | WS_VISIBLE,
+                        CW_USEDEFAULT, // x
+                        CW_USEDEFAULT, // y
+                        width,         // width
+                        height,        // height
+                        Some(handle),  // parent window handle (the frame)
+                        None,          // hmenu
+                        Some(instance),
+                        Some(&ccs as *const _ as *const _), // lparam
+                    ) {
+                        Ok(h) => {
+                            debug!("successfully created MDICLIENT");
+                            form_alloc.mdi_client_hwnd.set(h);
+                        }
+                        Err(_) => {
+                            panic!("Failed to create MDI client window");
+                        }
+                    }
+                }
+
+                MdiMode::Child => {
+                    let child_class_atom = register_mdi_child_lazy();
+                    let mdi_parent_form = form_alloc.mdi_parent.as_ref().unwrap();
+
+                    let mdi_create = MDICREATESTRUCTW {
+                        szClass: PCWSTR::from_raw(child_class_atom as usize as *const u16),
+                        szTitle: window_name_pwstr,
+                        hOwner: HANDLE(instance.0),
+                        x: CW_USEDEFAULT,
+                        y: CW_USEDEFAULT,
+                        cx: width,
+                        cy: height,
+                        style: WINDOW_STYLE(MDIS_ALLCHILDSTYLES), // WS_MINIMIZE | WS_MAXIMIZE | WS_VISIBLE | WS_OVERLAPPED,
+                        lParam: LPARAM(form_alloc_ptr as *const c_void as isize), // lparam
+                    };
+
+                    let mdi_client_hwnd = mdi_parent_form.rc.mdi_client_hwnd.get();
+                    assert!(!mdi_client_hwnd.is_invalid());
+
+                    about_to_create_window();
+
+                    let mdi_child_lresult = SendMessageW(
+                        mdi_client_hwnd,
+                        WM_MDICREATE,
+                        None,
+                        Some(LPARAM(&mdi_create as *const _ as isize)),
+                    );
+                    if mdi_child_lresult.0 == 0 {
+                        panic!("failed to create MDI child window");
+                    }
+
+                    handle = HWND(mdi_child_lresult.0 as *mut c_void);
+                }
+            }
 
             // let _ = SetWindowTheme(handle, w!("EXPLORER"), PCWSTR::null());
             // let _ = SetWindowTheme(handle, w!("Window"), PCWSTR::null());
@@ -192,4 +306,9 @@ impl FormBuilder {
             Form { rc: form_alloc }
         }
     }
+}
+
+#[inline(never)]
+fn about_to_create_window() {
+    debug!("about to create window");
 }

@@ -2,6 +2,9 @@ use std::collections::VecDeque;
 use std::sync::Once;
 
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
+use windows::Win32::UI::WindowsAndMessaging as wm;
+
+use crate::dbg::message_str;
 
 use super::*;
 
@@ -93,11 +96,13 @@ impl App {
     pub fn form_builder(&self) -> FormBuilder {
         FormBuilder {
             app: self.clone(),
-            title: None,
+            title: "Form".to_string(),
             size: None,
             parent: None,
             quit_on_close: Some(0),
             style: None,
+            mdi_mode: MdiMode::None,
+            mdi_parent: None,
         }
     }
 }
@@ -114,10 +119,15 @@ pub(crate) struct AppState {
     /// This is a queue of events that we will report to the app. The events are written to this
     /// so that they can be processed safely _after_ we have exited the DispatchMessageW call.
     pub(crate) event_queue: RefCell<VecDeque<AppEvent>>,
+    // pub(crate) window_state: RefCell<HashMap<isize, WindowState>>,
 }
 
 impl App {
     pub fn wait_event(&self) -> Option<AppEvent> {
+        self.wait_event_mdi(None)
+    }
+
+    pub fn wait_event_mdi(&self, mdi_parent: Option<&Form>) -> Option<AppEvent> {
         unsafe {
             loop {
                 // See if there is already an app event.
@@ -135,7 +145,15 @@ impl App {
                     return None;
                 }
 
-                debug!("wm 0x{:04x}", msg.message);
+                match msg.message {
+                    // very chatty
+                    wm::WM_MOUSEMOVE | wm::WM_PAINT => {
+                        trace!("wm {}", message_str(msg.message));
+                    }
+                    _ => {
+                        debug!("wm {}", message_str(msg.message));
+                    }
+                }
 
                 if msg.message == WM_QUIT {
                     debug!("found WM_QUIT, quitting");
@@ -145,6 +163,14 @@ impl App {
                 // if IsDialogMessageW(self.handle(), &msg).into() {
                 //     continue;
                 // }
+
+                if let Some(mdi_parent) = mdi_parent {
+                    let client_hwnd = mdi_parent.rc.mdi_client_hwnd.get();
+                    if TranslateMDISysAccel(client_hwnd, &mut msg).into() {
+                        debug!("MDI message got translated");
+                        continue;
+                    }
+                }
 
                 _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
@@ -167,10 +193,53 @@ impl AppState {
 pub enum AppEvent {
     Quit,
 
+    // Command { control: ControlId, command: Command },
     Notify { control: ControlId, notify: Notify },
 }
 
 #[derive(Debug)]
 pub enum Notify {
+    // EN_SETFOCUS
+    SetFocus,
+    // EN_KILLFOCUS
+    LostFocus,
+
+    // BN_CLICKED
     ButtonClicked,
+
+    // EN_CHANGE
+    EditChange,
+
+    // LVN_COLUMNCLICK
+    ListColumnClick,
+
+    // ListView, TreeView
+    ItemClick { item: i32, subitem: i32 },
+
+    // ListView, TreeView
+    ItemDoubleClick { item: i32, subitem: i32 },
+
+    // ListView - LVN_ITEMACTIVATE
+    // https://learn.microsoft.com/en-us/windows/win32/controls/lvn-itemactivate
+    ListItemActivate,
+
+    // ListView - LVN_ITEMCHANGED
+    // https://learn.microsoft.com/en-us/windows/win32/controls/lvn-itemchanged
+    ListItemChanged,
+
+    // TreeView - TVN_ITEMCHANGED
+    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemchanged
+    TreeItemChanged,
+
+    // TreeView - TVN_ITEMEXPANDED
+    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemexpanded
+    TreeItemExpanded,
+
+    // TreeView - TVN_SELCHANGED
+    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-selchanged
+    TreeItemSelectionChanged,
+
+    // NM_RETURN
+    // https://learn.microsoft.com/en-us/windows/win32/controls/nm-return-tree-view-
+    Return,
 }

@@ -17,9 +17,11 @@ fn main() {
 
     let form = app
         .form_builder()
-        .size(1024, 768)
-        .quit_on_close()
-        .title("Gallery")
+        .with(|b| {
+            b.size(1024, 768);
+            b.quit_on_close();
+            b.title("Gallery");
+        })
         .build();
 
     form.set_layout(Layout::Grid(GridLayout {

@@ -20,17 +20,19 @@ struct AppState {
 }
 
 const CONTROL_ID_QUERY_BUTTON: ControlId = ControlId(1);
-//const CONTROL_ID_ROOT_DIRECTORY: ControlId = ControlId(2);
-//const CONTROL_ID_REGEX: ControlId = ControlId(3);
+const CONTROL_ID_ROOT_DIRECTORY: ControlId = ControlId(2);
+const CONTROL_ID_REGEX: ControlId = ControlId(3);
 
 fn main() {
     let app = forms::App::new();
 
     let form = app
         .form_builder()
-        .size(1600, 1200)
-        .quit_on_close()
-        .title("Search in Files")
+        .with(|b| {
+            b.size(1600, 1200);
+            b.quit_on_close();
+            b.title("Search in Files");
+        })
         .build();
 
     // form.set_default_edit_font(Font::builder("Verdana", 18).build().ok());
@@ -53,10 +55,10 @@ fn main() {
             w.set_text("Search");
             w.set_tab_stop(true);
         }),
-        root_directory: Edit::new(&form).with(|w| {
+        root_directory: Edit::new(&form, CONTROL_ID_ROOT_DIRECTORY).with(|w| {
             w.set_text(r"d:\rust_forms\examples");
         }),
-        regex: Edit::new(&form).with(|w| {
+        regex: Edit::new(&form, CONTROL_ID_REGEX).with(|w| {
             w.set_text("fn");
         }),
         root_directory_label: Label::new(&form).with(|w| {

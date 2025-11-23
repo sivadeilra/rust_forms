@@ -10,8 +10,10 @@ pub fn main() {
 
     let form = app
         .form_builder()
-        .size(1024, 768)
-        .title("Tab Control Demo")
+        .with(|b| {
+            b.size(1024, 768);
+            b.title("Tab Control Demo");
+        })
         .build();
 
     let tab_control = TabControl::new(&form);

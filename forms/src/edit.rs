@@ -21,11 +21,11 @@ impl core::ops::Deref for Edit {
 }
 
 impl Edit {
-    pub fn new(parent: &Form) -> Rc<Edit> {
-        Self::new_with_options(parent, Default::default())
+    pub fn new(parent: &Form, control_id: ControlId) -> Rc<Edit> {
+        Self::new_with_options(parent, control_id, Default::default())
     }
 
-    pub fn new_with_options(form: &Form, options: EditOptions) -> Rc<Edit> {
+    pub fn new_with_options(form: &Form, control_id: ControlId, options: EditOptions) -> Rc<Edit> {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
             let ex_style = WINDOW_EX_STYLE(0);
@@ -59,8 +59,8 @@ impl Edit {
                 0,
                 0,
                 Some(form.handle()),
-                None, // menu
-                None, // instance
+                Some(HMENU(control_id.0 as _)), // menu
+                None,                           // instance
                 None, // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
             )
             .unwrap();

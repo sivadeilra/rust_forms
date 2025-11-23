@@ -1,4 +1,5 @@
 use forms::*;
+use tracing::debug;
 
 const IDC_MODE_DETAILS: ControlId = ControlId(1);
 const IDC_MODE_ICONS: ControlId = ControlId(2);
@@ -6,15 +7,50 @@ const IDC_ADD_ITEM: ControlId = ControlId(3);
 const IDC_DELETE_ITEM: ControlId = ControlId(4);
 const IDC_FULL_ROW_SELECT: ControlId = ControlId(5);
 const IDC_CHECKBOXES: ControlId = ControlId(6);
-const IDC_GRIDLINES: ControlId = ControlId(7);
+// const IDC_GRIDLINES: ControlId = ControlId(7);
 
 pub fn main() {
     let app = forms::App::new();
+
     let form = app
         .form_builder()
         .with(|b| {
+            b.mdi_frame();
             b.size(1024, 768);
-            b.title("List View");
+        })
+        .build()
+        .with(|f| {
+            f.set_title("MDI App");
+        });
+
+    debug!("creating MDI child window");
+    let _child = make_child_form(&form);
+
+    while let Some(event) = app.wait_event_mdi(Some(&form)) {
+        match event {
+            AppEvent::Quit => break,
+
+            AppEvent::Notify {
+                control: control_id,
+                notify,
+            } => {
+                debug!(
+                    control_id = control_id.0,
+                    ?notify,
+                    "unrecognized notification"
+                );
+            }
+        }
+    }
+}
+
+fn make_child_form(parent: &Form) -> Form {
+    let form = parent
+        .app()
+        .form_builder()
+        .with(|b| {
+            b.mdi_parent(parent);
+            b.title("Hello!");
         })
         .build();
 
@@ -66,36 +102,5 @@ pub fn main() {
         ],
     }));
 
-    {
-        let lv = lv.clone();
-        form.command_handler(move |control, command| match (control, command) {
-            (IDC_MODE_DETAILS, Command::ButtonClicked) => {
-                lv.set_mode(Mode::Details);
-            }
-            (IDC_MODE_ICONS, Command::ButtonClicked) => {
-                lv.set_mode(Mode::Icon);
-            }
-            (IDC_ADD_ITEM, Command::ButtonClicked) => {
-                let name = format!("item #{}", lv.items_len());
-                lv.insert_item(&name);
-            }
-            (IDC_DELETE_ITEM, Command::ButtonClicked) => {
-                let selected_items: Vec<usize> = lv.iter_selected_items().collect();
-                for selected_item in selected_items {
-                    lv.delete_item(selected_item);
-                }
-            }
-            (IDC_FULL_ROW_SELECT, Command::ButtonClicked) => {
-                lv.set_full_row_select(full_row_select.is_checked());
-            }
-            (IDC_CHECKBOXES, Command::ButtonClicked) => {
-                lv.set_check_boxes(checkboxes_button.is_checked())
-            }
-            (IDC_GRIDLINES, Command::ButtonClicked) => {}
-
-            _ => {}
-        });
-    }
-
-    form.show_modal();
+    form
 }

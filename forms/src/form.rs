@@ -1,9 +1,10 @@
 use super::*;
+use crate::dbg::message_str;
 use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
 use std::cell::OnceCell;
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 use tracing::debug;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::WindowsAndMessaging as wm;
@@ -18,10 +19,25 @@ pub struct Form {
     pub(crate) rc: Rc<FormState>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub(crate) enum MdiMode {
+    /// Normal top-level window
+    None,
+    /// MDI frame
+    Frame,
+    /// MDI child
+    Child,
+}
+
 pub(crate) struct FormState {
     pub(crate) app: App,
 
     stuck: StuckToThread,
+
+    pub(crate) mdi_mode: MdiMode,
+    pub(crate) mdi_parent: Option<Form>,
+
+    pub(crate) mdi_client_hwnd: Cell<HWND>,
 
     pub(crate) control: OnceCell<ControlState>,
     pub(crate) handle: Cell<HWND>,
@@ -277,7 +293,7 @@ impl Form {
                     break;
                 }
 
-                debug!("wm 0x{:04x}", msg.message);
+                // debug!("wm 0x{:04x}", msg.message);
 
                 if msg.message == WM_QUIT {
                     debug!("found WM_QUIT, quitting");
@@ -307,13 +323,12 @@ impl Drop for DisabledFormScope {
     }
 }
 
-static REGISTER_CLASS_ONCE: Once = Once::new();
-static mut FORM_CLASS_ATOM: ATOM = 0;
+static REGISTER_CLASS_ONCE: OnceLock<ATOM> = OnceLock::new();
 
 const FORM_CLASS_NAME: &str = "RustForms_Form";
 
 fn register_class_lazy() -> ATOM {
-    REGISTER_CLASS_ONCE.call_once(|| unsafe {
+    *REGISTER_CLASS_ONCE.get_or_init(|| unsafe {
         let instance = get_instance();
 
         let mut class_name_wstr = U16CString::from_str(FORM_CLASS_NAME).unwrap();
@@ -332,10 +347,151 @@ fn register_class_lazy() -> ATOM {
         if atom == 0 {
             panic!("Failed to register window class");
         }
-        FORM_CLASS_ATOM = atom;
-    });
+        atom
+    })
+}
 
-    unsafe { FORM_CLASS_ATOM }
+static MDI_FRAME_CLASS_ATOM: OnceLock<ATOM> = OnceLock::new();
+
+const MDI_FRAME_CLASS_NAME: &str = "RustForms_MdiFrame";
+
+fn register_mdi_frame_class_lazy() -> ATOM {
+    *MDI_FRAME_CLASS_ATOM.get_or_init(|| unsafe {
+        let instance = get_instance();
+
+        let mut class_name_wstr = U16CString::from_str(MDI_FRAME_CLASS_NAME).unwrap();
+
+        let mut class_ex: WNDCLASSEXW = zeroed();
+        class_ex.cbSize = size_of::<WNDCLASSEXW>() as u32;
+        class_ex.hInstance = instance;
+        class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
+        class_ex.style = WNDCLASS_STYLES(0); // CS_HREDRAW | CS_VREDRAW;
+        class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
+        // class_ex.lpfnWndProc = Some(form_wndproc_mdi_frame);
+        class_ex.lpfnWndProc = Some(form_wndproc);
+        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
+        class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
+
+        let atom = RegisterClassExW(&class_ex);
+        if atom == 0 {
+            panic!("Failed to register window class");
+        }
+        atom
+    })
+}
+
+static MDI_CHILD_CLASS_ATOM: OnceLock<ATOM> = OnceLock::new();
+
+const MDI_CHILD_CLASS_NAME: &str = "RustForms_MdiChildWindow";
+
+fn register_mdi_child_lazy() -> ATOM {
+    *MDI_CHILD_CLASS_ATOM.get_or_init(|| unsafe {
+        let instance = get_instance();
+
+        let mut class_name_wstr = U16CString::from_str(MDI_CHILD_CLASS_NAME).unwrap();
+
+        let mut class_ex: WNDCLASSEXW = zeroed();
+        class_ex.cbSize = size_of::<WNDCLASSEXW>() as u32;
+        class_ex.hInstance = instance;
+        class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
+        class_ex.style = CS_HREDRAW | CS_VREDRAW;
+        class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
+        class_ex.lpfnWndProc = Some(form_wndproc_mdi_child);
+        // class_ex.lpfnWndProc = Some(form_wndproc);
+        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
+        class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
+
+        let atom = RegisterClassExW(&class_ex);
+        if atom == 0 {
+            panic!("Failed to register MDI child window class");
+        }
+        atom
+    })
+}
+
+#[cfg(false)]
+extern "system" fn form_wndproc_mdi_frame(
+    window: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    debug!("form_wndproc_mdi_frame: message {message:#4x}");
+
+    unsafe {
+        match message {
+            wm::WM_MDIACTIVATE => {}
+
+            wm::WM_GETMINMAXINFO => {
+                let min_max: *mut MINMAXINFO = lparam.0 as *mut MINMAXINFO;
+                min_max.write(MINMAXINFO {
+                    ptMinTrackSize: POINT { x: 400, y: 400 },
+                    ptMaxTrackSize: POINT { x: 10000, y: 10000 },
+                    ..Default::default()
+                });
+                return LRESULT(0);
+            }
+
+            wm::WM_SIZE => {
+                let mut client_rect: RECT = core::mem::zeroed();
+                _ = GetClientRect(window, &mut client_rect);
+                _ = SetWindowPos(
+                    mdi_client_hwnd,
+                    None,
+                    0,
+                    0,
+                    client_rect.right,
+                    client_rect.bottom,
+                    SWP_NOZORDER,
+                );
+            }
+
+            _ => {}
+        }
+
+        DefFrameProcW(window, None, message, wparam, lparam)
+    }
+}
+
+extern "system" fn form_wndproc_mdi_child(
+    window: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    debug!("form_wndproc_mdi_child: message {}", message_str(message));
+
+    unsafe {
+        match message {
+            wm::WM_CREATE => {
+                let create_struct: *mut CREATESTRUCTW = lparam.0 as *mut CREATESTRUCTW;
+                assert!(!create_struct.is_null());
+
+                let create_params = (*create_struct).lpCreateParams;
+                assert!(!create_params.is_null());
+                // let form_state: &FormState = &*(create_params as *const FormState);
+
+                debug!(
+                    "WM_CREATE for MDI child, create params = {:?}",
+                    (*create_struct).lpCreateParams
+                );
+
+                let mdi_create_struct: &MDICREATESTRUCTW =
+                    &*(create_params as *const MDICREATESTRUCTW);
+
+                let form_state: *const FormState = mdi_create_struct.lParam.0 as *const FormState;
+
+                debug!(?form_state, "the for-reals Form pointer");
+
+                SetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0), form_state as isize);
+                return LRESULT(1);
+            }
+
+            _ => {}
+        }
+
+        form_wndproc(window, message, wparam, lparam)
+    }
 }
 
 extern "system" fn form_wndproc(
@@ -403,10 +559,20 @@ extern "system" fn form_wndproc(
                 return LRESULT(0);
             }
 
+            wm::WM_GETMINMAXINFO => {
+                let min_max: *mut MINMAXINFO = lparam.0 as *mut MINMAXINFO;
+                min_max.write(MINMAXINFO {
+                    ptMinTrackSize: POINT { x: 400, y: 400 },
+                    ptMaxTrackSize: POINT { x: 10000, y: 10000 },
+                    ..Default::default()
+                });
+                return LRESULT(0);
+            }
+
             wm::WM_SIZE => {
                 let new_width = (lparam.0 & 0xffff) as u32;
                 let new_height = ((lparam.0 >> 16) & 0xffff) as u32;
-                trace!("WM_SIZE: {} x {}", new_width, new_height);
+                debug!("WM_SIZE: {} x {}", new_width, new_height);
 
                 if let Some(sb) = form.status_bar.take() {
                     form.status_bar.set(Some(sb.clone()));
@@ -415,6 +581,21 @@ extern "system" fn form_wndproc(
 
                 form.invalidate_layout();
                 form.ensure_layout_valid();
+
+                if form.mdi_mode == MdiMode::Frame {
+                    // let mut client_rect: RECT = core::mem::zeroed();
+                    // _ = GetClientRect(window, &mut client_rect);
+                    debug!("setting MDI client size to {} x {}", new_width, new_height);
+                    _ = SetWindowPos(
+                        form.mdi_client_hwnd.get(),
+                        None,
+                        0,
+                        0,
+                        new_width as i32,
+                        new_height as i32,
+                        SWP_NOZORDER,
+                    );
+                }
 
                 // return 0;
             }
@@ -431,6 +612,27 @@ extern "system" fn form_wndproc(
                         app.state.push_event(AppEvent::Notify {
                             control,
                             notify: Notify::ButtonClicked,
+                        });
+                    }
+
+                    wm::EN_CHANGE => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::EditChange,
+                        });
+                    }
+
+                    wm::BN_SETFOCUS | wm::EN_SETFOCUS => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::SetFocus,
+                        });
+                    }
+
+                    wm::BN_KILLFOCUS | wm::EN_KILLFOCUS => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::LostFocus,
                         });
                     }
 
@@ -455,6 +657,10 @@ extern "system" fn form_wndproc(
                 let notify_code = (*nmhdr_ptr).code;
                 // let notify = Notify::from_nmhdr(nmhdr_ptr);
 
+                let control: ControlId = ControlId(wparam.0 as u16);
+
+                use windows::Win32::UI::Controls as controls;
+
                 // For some notifications, we need to handle the notification directly.
                 match notify_code {
                     TCN_SELCHANGE => {
@@ -466,6 +672,90 @@ extern "system" fn form_wndproc(
                             }
                         }
                     }
+
+                    // Used for ListView, TreeView
+                    // https://learn.microsoft.com/en-us/windows/win32/controls/nm-click-list-view
+                    controls::NM_CLICK => {
+                        let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ItemClick {
+                                item: details.iItem,
+                                subitem: details.iSubItem,
+                            },
+                        });
+                    }
+
+                    // Used for ListView, TreeView
+                    // https://learn.microsoft.com/en-us/windows/win32/controls/nm-dblclk-list-view
+                    controls::NM_DBLCLK => {
+                        let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ItemDoubleClick {
+                                item: details.iItem,
+                                subitem: details.iSubItem,
+                            },
+                        });
+                    }
+
+                    controls::LVN_COLUMNCLICK => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ListColumnClick,
+                        });
+                    }
+
+                    controls::LVN_ITEMCHANGED => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ListItemChanged,
+                        });
+                    }
+
+                    controls::LVN_ITEMACTIVATE => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::ListItemActivate,
+                        });
+                    }
+
+                    controls::NM_RETURN => {
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::Return,
+                        });
+                    }
+
+                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemchanged
+                    controls::TVN_ITEMCHANGED => {
+                        let item_change: &NMTVITEMCHANGE = &*(lparam.0 as *const NMTVITEMCHANGE);
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::TreeItemChanged,
+                        });
+                    }
+
+                    // TreeView - TVN_ITEMEXPANDED
+                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemexpanded
+                    controls::TVN_ITEMEXPANDED => {
+                        let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::TreeItemExpanded,
+                        });
+                    }
+
+                    // TreeView - TVN_SELCHANGED
+                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-selchanged
+                    controls::TVN_SELCHANGED => {
+                        let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
+                        app.state.push_event(AppEvent::Notify {
+                            control,
+                            notify: Notify::TreeItemSelectionChanged,
+                        });
+                    }
+
                     _ => {}
                 }
 
@@ -476,6 +766,8 @@ extern "system" fn form_wndproc(
                     debug!("no WM_NOTIFY handler installed");
                 }
                 */
+
+                return LRESULT(0);
             }
 
             // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
@@ -543,12 +835,25 @@ extern "system" fn form_wndproc(
                 return LRESULT(0);
             }
 
+            // MDI frame events
+            wm::WM_CHILDACTIVATE => {
+                debug!("WM_CHILDACTIVATE");
+            }
+
+            wm::WM_MDIACTIVATE => {
+                debug!("WM_MDIACTIVATE");
+            }
+
             _ => {
                 // allow default to run
             }
         }
 
-        DefWindowProcW(window, message, wparam, lparam)
+        match form.mdi_mode {
+            MdiMode::Child => DefMDIChildProcW(window, message, wparam, lparam),
+            MdiMode::None => DefWindowProcW(window, message, wparam, lparam),
+            MdiMode::Frame => DefFrameProcW(window, None, message, wparam, lparam),
+        }
     }
 }
 

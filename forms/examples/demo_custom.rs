@@ -7,8 +7,10 @@ pub fn main() {
 
     let form = app
         .form_builder()
-        .size(1024, 768)
-        .title("Custom Control Demo")
+        .with(|b| {
+            b.size(1024, 768);
+            b.title("Custom Control Demo");
+        })
         .build();
 
     let custom = CustomControl::new(

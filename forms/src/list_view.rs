@@ -154,6 +154,17 @@ impl ListView {
         self.get_ex_style_bool(LVS_EX_FULLROWSELECT)
     }
 
+    pub fn set_show_selection_always(&self, value: bool) {
+        self.control.set_window_style_bits(
+            WINDOW_STYLE(LVS_SHOWSELALWAYS),
+            if value {
+                WINDOW_STYLE(LVS_SHOWSELALWAYS)
+            } else {
+                WINDOW_STYLE(0)
+            },
+        );
+    }
+
     pub fn set_check_boxes(&self, value: bool) {
         self.set_ex_style_bool(LVS_EX_CHECKBOXES, value);
     }

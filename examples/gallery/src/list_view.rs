@@ -4,9 +4,11 @@ pub fn demo_list_view(parent: &Form) {
     let form = parent
         .app()
         .form_builder()
-        // .parent(parent)
-        .size(1024, 768)
-        .title("List View")
+        .with(|b| {
+            // .parent(parent)
+            b.size(1024, 768);
+            b.title("List View");
+        })
         .build();
 
     let lv = ListView::new(&form);

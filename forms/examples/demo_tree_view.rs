@@ -11,9 +11,15 @@ const IDC_CHECKBOXES: ControlId = ControlId(6);
 pub fn main() {
     let app = forms::App::new();
 
-    let form = app.form_builder().size(1024, 768).build().with(|f| {
-        f.set_title("List View");
-    });
+    let form = app
+        .form_builder()
+        .with(|b| {
+            b.size(1024, 768);
+        })
+        .build()
+        .with(|f| {
+            f.set_title("List View");
+        });
 
     let tv = TreeView::new(
         &form,
@@ -23,6 +29,7 @@ pub fn main() {
             ..Default::default()
         },
     );
+    // TODO: provide a way to set TreeView's control ID
 
     let next_item: Cell<u32> = Cell::new(1);
     let get_next_item = move || -> u32 {
@@ -83,8 +90,6 @@ pub fn main() {
         ],
     }));
 
-    form.show();
-
     while let Some(event) = app.wait_event() {
         match event {
             AppEvent::Quit => break,
@@ -116,6 +121,13 @@ pub fn main() {
                 notify: Notify::ButtonClicked,
             } => {
                 tv.set_check_boxes(checkboxes_button.is_checked());
+            }
+
+            AppEvent::Notify {
+                control: _,
+                notify: Notify::Return,
+            } => {
+                debug!("return pressed");
             }
 
             AppEvent::Notify {
