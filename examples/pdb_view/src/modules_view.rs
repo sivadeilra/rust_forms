@@ -12,6 +12,10 @@ pub struct ModulesForm {
     pub search_text: Rc<Edit>,
 }
 
+pub const MODULES_COLUMN_ID: u32 = 0;
+pub const MODULES_COLUMN_OBJECT_FILE: u32 = 1;
+pub const MODULES_COLUMN_MODULE_NAME: u32 = 2;
+
 impl ModulesForm {
     pub fn new(parent: &Form) -> Self {
         let form = parent
@@ -24,14 +28,14 @@ impl ModulesForm {
             })
             .build();
 
-        let list_view = ListView::new(&form).with(|b| {
+        let list_view = ListView::new(&form, Some(IDC_MODULES_LIST_VIEW)).with(|b| {
             b.set_mode(Mode::Details);
             b.set_grid_lines(true);
             b.set_full_row_select(true);
             b.set_show_selection_always(true);
-            b.add_column(0, 30, "Id");
-            b.add_column(1, 200, "Object File");
-            b.add_column(2, 400, "Module Name");
+            b.add_column(MODULES_COLUMN_ID, 30, "Id");
+            b.add_column(MODULES_COLUMN_OBJECT_FILE, 200, "Object File");
+            b.add_column(MODULES_COLUMN_MODULE_NAME, 400, "Module Name");
         });
 
         let search_text = Edit::new(&form, IDC_MODULES_SEARCH_EDIT);

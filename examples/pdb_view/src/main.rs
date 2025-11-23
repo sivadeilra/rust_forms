@@ -1,23 +1,31 @@
 mod modules_view;
 mod pdb_ken;
 mod symbols_view;
+mod text_form;
 
 use forms::{App, AppEvent, ControlId, Form, ListView, Notify, With, control_ids};
 use ms_pdb::Pdb;
 use tracing::{debug, error};
 
-use crate::modules_view::ModulesForm;
+use crate::modules_view::{MODULES_COLUMN_ID, ModulesForm};
 use crate::pdb_ken::PdbKen;
 use crate::symbols_view::SymbolsForm;
 
 control_ids! {
+    // ModulesForm
     IDC_MODULES_SEARCH_BUTTON,
     IDC_MODULES_SEARCH_EDIT,
+    IDC_MODULES_LIST_VIEW,
 
     // SymbolsForm
     IDC_SYMBOLS_SEARCH_BUTTON,
     IDC_SYMBOLS_MODULE_FILTER_EDIT,
+    IDC_SYMBOLS_LIST_VIEW,
     IDC_SYMBOLS_SYMBOL_NAME_FILTER_EDIT,
+
+
+
+    IDC_TEXT_FORM_EDIT,
 }
 
 fn main() {
@@ -105,6 +113,28 @@ impl PdbView {
             } => {
                 if let Some(pdb) = &mut self.pdb {
                     _ = self.symbols_form.on_search(pdb);
+                }
+            }
+
+            AppEvent::Notify {
+                control: IDC_MODULES_LIST_VIEW,
+                notify: Notify::ItemDoubleClick { item, subitem },
+            } => {
+                debug!(item, subitem, "double-click");
+
+                if let Some(selected) = self.modules_form.list_view.iter_selected_items().next() {
+                    let id_text = self
+                        .modules_form
+                        .list_view
+                        .get_item_text(selected, MODULES_COLUMN_ID as _);
+                    if let Ok(module_index) = id_text.parse() {
+                        let _: u32 = module_index;
+                        debug!(module_index);
+                    } else {
+                        // well that is a surprise
+                    }
+                } else {
+                    // double-clicked on nothing
                 }
             }
 

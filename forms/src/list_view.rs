@@ -14,7 +14,7 @@ pub struct ListView {
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    pub fn new(parent_control: &ControlState) -> Rc<ListView> {
+    pub fn new(parent_control: &ControlState, control_id: Option<ControlId>) -> Rc<ListView> {
         unsafe {
             let parent_window = parent_control.handle();
             let window_name = WCString::from_str_truncate("");
@@ -31,7 +31,11 @@ impl ListView {
                 0,
                 0,
                 Some(parent_window),
-                None,
+                Some(HMENU(if let Some(id) = control_id {
+                    id.0 as _
+                } else {
+                    null_mut()
+                })),
                 Some(HINSTANCE(get_instance().0)),
                 None,
             ) {

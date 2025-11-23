@@ -18,7 +18,7 @@ pub fn main() {
         })
         .build();
 
-    let lv = ListView::new(&form);
+    let lv = ListView::new(&form, None);
     lv.add_column(0, 120, "Stuff");
     lv.add_column(1, 120, "More Stuff");
     lv.set_mode(Mode::Details);

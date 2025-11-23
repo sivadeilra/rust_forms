@@ -54,7 +54,7 @@ fn make_child_form(parent: &Form) -> Form {
         })
         .build();
 
-    let lv = ListView::new(&form);
+    let lv = ListView::new(&form, None);
     lv.add_column(0, 120, "Stuff");
     lv.add_column(1, 120, "More Stuff");
     lv.set_mode(Mode::Details);
@@ -85,19 +85,19 @@ fn make_child_form(parent: &Form) -> Form {
 
     let buttons_layout = Layout::Stack(
         StackLayout::vertical(30)
-            .control(mode_details_button.clone())
-            .control(mode_icons_button.clone())
-            .control(add_item.clone())
-            .control(delete_item.clone())
-            .control(full_row_select.clone())
-            .control(checkboxes_button.clone()),
+            .control(&mode_details_button)
+            .control(&mode_icons_button)
+            .control(&add_item)
+            .control(&delete_item)
+            .control(&full_row_select)
+            .control(&checkboxes_button),
     );
 
     form.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis::new().fixed(50).auto().fixed(50),
         cols: GridAxis::new().auto_min(300).fixed(200),
         items: vec![
-            GridItem::control(1, 0, lv.clone()),
+            GridItem::control(1, 0, &lv),
             GridItem::new(1, 1, LayoutItem::Layout(Box::new(buttons_layout))),
         ],
     }));

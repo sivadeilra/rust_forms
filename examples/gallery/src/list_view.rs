@@ -11,7 +11,7 @@ pub fn demo_list_view(parent: &Form) {
         })
         .build();
 
-    let lv = ListView::new(&form);
+    let lv = ListView::new(&form, None);
     lv.set_full_row_select(true);
     lv.add_column(0, 120, "Stuff");
     lv.add_column(1, 120, "More Stuff");

@@ -48,7 +48,7 @@ impl SymbolsForm {
         let symbol_name_filter_label = Label::new(&form, "Symbol name filter:");
         let symbol_name_filter_edit = Edit::new(&form, IDC_SYMBOLS_SYMBOL_NAME_FILTER_EDIT);
 
-        let list_view = ListView::new(&form).with(|b| {
+        let list_view = ListView::new(&form, Some(IDC_SYMBOLS_LIST_VIEW)).with(|b| {
             b.set_mode(Mode::Details);
             b.set_tab_stop(true);
             b.set_full_row_select(true);
