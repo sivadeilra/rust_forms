@@ -74,18 +74,18 @@ pub fn main() {
 
     let buttons_layout = Layout::Stack(
         StackLayout::vertical(30)
-            .control(add_root.clone())
-            .control(add_item.clone())
-            .control(delete_item.clone())
-            .control(has_lines_button.clone())
-            .control(checkboxes_button.clone()),
+            .control(&add_root)
+            .control(&add_item)
+            .control(&delete_item)
+            .control(&has_lines_button)
+            .control(&checkboxes_button),
     );
 
     form.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis::new().fixed(50).auto().fixed(50),
         cols: GridAxis::new().auto_min(300).fixed(200),
         items: vec![
-            GridItem::control(1, 0, tv.clone()),
+            GridItem::control(1, 0, &tv),
             GridItem::new(1, 1, LayoutItem::Layout(Box::new(buttons_layout))),
         ],
     }));
