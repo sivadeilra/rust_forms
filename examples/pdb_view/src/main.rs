@@ -23,8 +23,6 @@ control_ids! {
     IDC_SYMBOLS_LIST_VIEW,
     IDC_SYMBOLS_SYMBOL_NAME_FILTER_EDIT,
 
-
-
     IDC_TEXT_FORM_EDIT,
 }
 

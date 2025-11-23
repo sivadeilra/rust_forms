@@ -2,8 +2,9 @@
 
 use super::*;
 
+#[derive(Clone)]
 pub struct StatusBar {
-    control: ControlState,
+    control: Rc<ControlState>,
 }
 
 impl core::ops::Deref for StatusBar {
@@ -16,7 +17,7 @@ impl core::ops::Deref for StatusBar {
 const STATUSCLASSNAME: &str = "msctls_statusbar32";
 
 impl StatusBar {
-    pub fn new(form: &Form) -> Rc<Self> {
+    pub fn new(form: &Form) -> Self {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
@@ -33,9 +34,9 @@ impl StatusBar {
             )
             .unwrap();
 
-            let state: Rc<StatusBar> = Rc::new(StatusBar {
+            let state = StatusBar {
                 control: ControlState::new(hwnd),
-            });
+            };
 
             _ = SendMessageW(
                 state.handle(),

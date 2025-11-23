@@ -4,7 +4,7 @@ use windows::core::w;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 
 pub struct TabControl {
-    control: ControlState,
+    control: Rc<ControlState>,
     tabs: RefCell<Vec<Tab>>,
 }
 
@@ -18,7 +18,7 @@ struct Tab {
 pub struct TabPane {
     pub(crate) layout: RefCell<Option<Layout>>,
     pub(crate) layout_is_valid: Cell<bool>,
-    control: ControlState,
+    control: Rc<ControlState>,
 }
 
 impl TabPane {
@@ -29,15 +29,15 @@ impl TabPane {
 }
 
 impl core::ops::Deref for TabPane {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
 
 impl core::ops::Deref for TabControl {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }

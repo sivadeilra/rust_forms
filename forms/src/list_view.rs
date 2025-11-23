@@ -1,20 +1,21 @@
 use super::*;
 
-impl core::ops::Deref for ListView {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
-        &self.control
-    }
+#[derive(Clone)]
+pub struct ListView {
+    control: Rc<ControlState>,
 }
 
-pub struct ListView {
-    control: ControlState,
+impl core::ops::Deref for ListView {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
+        &self.control
+    }
 }
 
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    pub fn new(parent_control: &ControlState, control_id: Option<ControlId>) -> Rc<ListView> {
+    pub fn new(parent_control: &ControlState, control_id: Option<ControlId>) -> ListView {
         unsafe {
             let parent_window = parent_control.handle();
             let window_name = WCString::from_str_truncate("");
@@ -43,12 +44,9 @@ impl ListView {
                 Err(e) => panic!("failed to create ListView window: {e:?}"),
             };
 
-            let state: Rc<ListView> = Rc::new(ListView {
+            ListView {
                 control: ControlState::new(hwnd),
-            });
-            // form.invalidate_layout();
-
-            state
+            }
         }
     }
 

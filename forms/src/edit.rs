@@ -1,7 +1,7 @@
 use super::*;
 
 pub struct Edit {
-    control: ControlState,
+    control: Rc<ControlState>,
 }
 
 #[derive(Default, Clone)]
@@ -14,18 +14,18 @@ pub struct EditOptions {
 }
 
 impl core::ops::Deref for Edit {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
 
 impl Edit {
-    pub fn new(parent: &Form, control_id: ControlId) -> Rc<Edit> {
+    pub fn new(parent: &Form, control_id: ControlId) -> Edit {
         Self::new_with_options(parent, control_id, Default::default())
     }
 
-    pub fn new_with_options(form: &Form, control_id: ControlId, options: EditOptions) -> Rc<Edit> {
+    pub fn new_with_options(form: &Form, control_id: ControlId, options: EditOptions) -> Edit {
         unsafe {
             let class_name: U16CString = U16CString::from_str_truncate("Edit");
             let ex_style = WINDOW_EX_STYLE(0);
@@ -68,22 +68,8 @@ impl Edit {
             .unwrap();
 
             let control = ControlState::new(handle);
-            let this = Rc::new(Edit { control });
-
-            this.set_font(&form.rc.style.edit_font);
-
-            this
-        }
-    }
-
-    pub fn set_font(&self, font: &Font) {
-        unsafe {
-            SendMessageW(
-                self.control.handle(),
-                WM_SETFONT,
-                Some(WPARAM(font.hfont.0 as usize)),
-                Some(LPARAM(1)),
-            );
+            control.set_font(&form.rc.style.edit_font);
+            Edit { control }
         }
     }
 

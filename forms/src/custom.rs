@@ -8,7 +8,7 @@ pub struct CustomControl<Inner>
 where
     Inner: CustomInner,
 {
-    control: ControlState,
+    control: Rc<ControlState>,
     inner: Inner,
 
     bouncer: MaybeUninit<Bouncer>,
@@ -27,9 +27,9 @@ impl<Inner> std::ops::Deref for CustomControl<Inner>
 where
     Inner: CustomInner + 'static,
 {
-    type Target = ControlState;
+    type Target = Rc<ControlState>;
 
-    fn deref(&self) -> &ControlState {
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
@@ -74,7 +74,7 @@ where
             debug!("created custom control");
 
             let only_me = Rc::get_mut(&mut me).unwrap();
-            only_me.control.hwnd = hwnd;
+            only_me.control.hwnd.set(hwnd);
 
             me
         }

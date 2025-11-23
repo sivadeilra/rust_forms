@@ -144,14 +144,8 @@ impl GridItem {
         }
     }
 
-    pub fn control<C>(row: u16, col: u16, c: &Rc<C>) -> Self
-    where
-        C: Deref<Target = ControlState>,
-        C: 'static,
-    {
-        let r: Rc<C> = Rc::clone(c);
-        let dr: Rc<dyn Deref<Target = ControlState> + 'static> = r;
-        Self::new(row, col, LayoutItem::Control(dr))
+    pub fn control(row: u16, col: u16, control: &Rc<ControlState>) -> Self {
+        Self::new(row, col, LayoutItem::Control(control.clone()))
     }
 
     pub fn layout(row: u16, col: u16, layout: Layout) -> Self {

@@ -2,7 +2,6 @@ use anyhow::Result;
 use ms_pdb::BStr;
 use ms_pdb::codeview::IteratorWithRangesExt;
 use ms_pdb::syms::{OffsetSegment, SymData, SymIter, SymKind};
-use std::rc::Rc;
 use zerocopy::IntoBytes;
 
 use super::*;
@@ -15,9 +14,9 @@ use forms::*;
 pub struct SymbolsForm {
     #[allow(dead_code)]
     form: Form,
-    list_view: Rc<ListView>,
-    module_filter_edit: Rc<Edit>,
-    symbol_name_filter_edit: Rc<Edit>,
+    list_view: ListView,
+    module_filter_edit: Edit,
+    symbol_name_filter_edit: Edit,
 }
 
 // const COLUMN_ID: u32 = 0;
@@ -134,14 +133,12 @@ impl SymbolsForm {
         let mut next_module_index = move || -> Option<usize> {
             if let Some(ref mut iter) = module_filter_iter {
                 iter.next().copied()
+            } else if next_module_index < num_modules {
+                let next = next_module_index;
+                next_module_index += 1;
+                Some(next)
             } else {
-                if next_module_index < num_modules {
-                    let next = next_module_index;
-                    next_module_index += 1;
-                    Some(next)
-                } else {
-                    None
-                }
+                None
             }
         };
 
@@ -235,7 +232,7 @@ impl SymbolsForm {
                 self.list_view
                     .set_subitem_text(ii, COLUMN_KIND as usize, kind);
                 self.list_view
-                    .set_subitem_text(ii, COLUKN_NAME as usize, &name.to_string());
+                    .set_subitem_text(ii, COLUKN_NAME as usize, &name);
             }
         }
 

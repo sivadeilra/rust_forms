@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use super::*;
 use forms::*;
 
@@ -8,7 +6,7 @@ pub struct TextForm {
     #[allow(dead_code)]
     pub form: Form,
 
-    pub text_edit: Rc<Edit>,
+    pub text_edit: Edit,
 }
 
 impl TextForm {

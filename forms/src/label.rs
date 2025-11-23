@@ -1,18 +1,19 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct Label {
-    control: ControlState,
+    control: Rc<ControlState>,
 }
 
 impl core::ops::Deref for Label {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
 
 impl Label {
-    pub fn new(form: &Form, text: &str) -> Rc<Self> {
+    pub fn new(form: &Form, text: &str) -> Self {
         unsafe {
             let parent_window = form.handle();
             let window_name = WCString::from_str_truncate("");
@@ -35,20 +36,12 @@ impl Label {
             )
             .unwrap();
 
-            let this = Label {
-                control: ControlState::new(hwnd),
-            };
+            let control = ControlState::new(hwnd);
+            control.set_font(&form.rc.style.static_font);
+            control.set_text(text);
 
-            this.set_font(&form.rc.style.static_font);
-
-            this.set_text(text);
-
-            Rc::new(this)
+            Label { control }
         }
-    }
-
-    pub fn set_text(&self, text: &str) {
-        set_window_text(self.control.handle(), text);
     }
 
     pub fn set_font(&self, font: &Font) {

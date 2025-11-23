@@ -165,10 +165,11 @@ impl App {
                 // }
 
                 if let Some(mdi_parent) = mdi_parent {
-                    let client_hwnd = mdi_parent.rc.mdi_client_hwnd.get();
-                    if TranslateMDISysAccel(client_hwnd, &mut msg).into() {
-                        debug!("MDI message got translated");
-                        continue;
+                    if let Some(ref mdi_client) = mdi_parent.rc.mdi_client {
+                        if TranslateMDISysAccel(mdi_client.handle(), &msg).into() {
+                            debug!("MDI message got translated");
+                            continue;
+                        }
                     }
                 }
 

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::rc::Rc;
 
 use forms::{Button, Edit, GridAxis, GridItem, GridLayout, Layout, Mode, StackLayout};
 
@@ -8,8 +7,8 @@ use super::*;
 pub struct ModulesForm {
     #[allow(dead_code)]
     pub form: Form,
-    pub list_view: Rc<ListView>,
-    pub search_text: Rc<Edit>,
+    pub list_view: ListView,
+    pub search_text: Edit,
 }
 
 pub const MODULES_COLUMN_ID: u32 = 0;

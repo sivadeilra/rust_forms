@@ -50,31 +50,28 @@ fn main() {
             {
                 let b = Button::new(&form, IDC_DEMO_LIST_VIEW);
                 b.set_text("List View");
-                GridItem::new(0, 0, LayoutItem::Control(b))
+                GridItem::control(0, 0, &b)
             },
             {
                 let b = Button::new(&form, IDC_DEMO_TREE_VIEW);
                 b.set_text("Tree View");
-                GridItem::new(0, 1, LayoutItem::Control(b))
+                GridItem::control(0, 1, &b)
             },
             {
                 let b = Button::new(&form, IDC_DEMO_TAB_CONTROL);
                 b.set_text("Tab Control");
-                GridItem::new(1, 0, LayoutItem::Control(b))
+                GridItem::control(1, 0, &b)
             },
             {
                 let b = Button::new(&form, IDC_DEMO_BUTTONS);
                 b.set_text("Buttons");
-                GridItem::new(1, 1, LayoutItem::Control(b))
+                GridItem::control(1, 1, &b)
             },
             {
                 let t = TabControl::new(&form);
                 t.add_tab(0, "Hello");
                 t.add_tab(1, "World");
-                GridItem {
-                    col_span: 3,
-                    ..GridItem::new(2, 0, LayoutItem::Control(t))
-                }
+                GridItem::control(2, 0, &t).col_span(3)
             },
         ],
     }));

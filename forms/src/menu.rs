@@ -41,7 +41,7 @@ impl Menu {
     pub fn track_popup_menu(&self, form: &Form, x: i32, y: i32) {
         unsafe {
             let flags = TRACK_POPUP_MENU_FLAGS(0);
-            if TrackPopupMenu(self.hmenu, flags, x, y, None, form.rc.handle.get(), None).into() {
+            if TrackPopupMenu(self.hmenu, flags, x, y, None, form.handle(), None).into() {
                 debug!("TrackPopupMenu succeeded");
             } else {
                 // debug!("TrackPopupMenu failed");

@@ -4,7 +4,17 @@ static_assertions::assert_not_impl_any!(ControlState: Send, Sync);
 
 pub struct ControlState {
     pub(crate) stuck: StuckToThread,
-    pub(crate) hwnd: HWND,
+    pub(crate) hwnd: Cell<HWND>,
+}
+
+impl Drop for ControlState {
+    fn drop(&mut self) {
+        self.stuck.check();
+
+        unsafe {
+            _ = DestroyWindow(self.hwnd.get());
+        }
+    }
 }
 
 impl core::fmt::Debug for ControlState {
@@ -16,18 +26,18 @@ impl core::fmt::Debug for ControlState {
 impl ControlState {
     pub(crate) fn handle(&self) -> HWND {
         self.stuck.check();
-        self.hwnd
+        self.hwnd.get()
     }
 
     pub(crate) fn check_thread(&self) {
         self.stuck.check();
     }
 
-    pub(crate) fn new(hwnd: HWND) -> ControlState {
-        Self {
-            hwnd,
+    pub(crate) fn new(hwnd: HWND) -> Rc<Self> {
+        Rc::new(Self {
+            hwnd: Cell::new(hwnd),
             stuck: StuckToThread::new(),
-        }
+        })
     }
 
     pub fn set_tab_stop(&self, value: bool) {
@@ -36,7 +46,7 @@ impl ControlState {
     }
 
     pub(crate) fn get_window_style(&self) -> WINDOW_STYLE {
-        unsafe { WINDOW_STYLE(GetWindowLongW(self.hwnd, GWL_STYLE) as u32) }
+        unsafe { WINDOW_STYLE(GetWindowLongW(self.hwnd.get(), GWL_STYLE) as u32) }
     }
 
     pub(crate) fn get_window_style_flag(&self, flag: WINDOW_STYLE) -> bool {
@@ -47,13 +57,13 @@ impl ControlState {
     #[allow(dead_code)]
     pub(crate) fn get_window_style_ex(&self) -> WINDOW_EX_STYLE {
         self.check_thread();
-        unsafe { WINDOW_EX_STYLE(GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32) }
+        unsafe { WINDOW_EX_STYLE(GetWindowLongW(self.hwnd.get(), GWL_EXSTYLE) as u32) }
     }
 
     pub(crate) fn set_window_style(&self, style: WINDOW_STYLE) {
         self.check_thread();
         unsafe {
-            SetWindowLongW(self.hwnd, GWL_STYLE, style.0 as i32);
+            SetWindowLongW(self.hwnd.get(), GWL_STYLE, style.0 as i32);
         }
     }
 
@@ -61,7 +71,7 @@ impl ControlState {
     pub(crate) fn set_window_style_ex(&self, style: WINDOW_EX_STYLE) {
         self.check_thread();
         unsafe {
-            SetWindowLongW(self.hwnd, GWL_EXSTYLE, style.0 as i32);
+            SetWindowLongW(self.hwnd.get(), GWL_EXSTYLE, style.0 as i32);
         }
     }
 
@@ -107,7 +117,7 @@ impl ControlState {
         self.check_thread();
         unsafe {
             _ = SetWindowPos(
-                self.hwnd,
+                self.hwnd.get(),
                 None, // insert after
                 rect.left,
                 rect.top,
@@ -121,7 +131,7 @@ impl ControlState {
     pub fn get_client_rect(&self) -> RECT {
         unsafe {
             let mut client_rect: RECT = zeroed();
-            _ = GetClientRect(self.hwnd, &mut client_rect);
+            _ = GetClientRect(self.hwnd.get(), &mut client_rect);
             client_rect
         }
     }
@@ -133,7 +143,7 @@ impl ControlState {
     pub fn show(&self) {
         unsafe {
             _ = SetWindowPos(
-                self.hwnd,
+                self.hwnd.get(),
                 None,
                 0,
                 0,
@@ -147,7 +157,7 @@ impl ControlState {
     pub fn hide(&self) {
         unsafe {
             _ = SetWindowPos(
-                self.hwnd,
+                self.hwnd.get(),
                 None,
                 0,
                 0,
@@ -160,7 +170,22 @@ impl ControlState {
 
     pub fn invalidate_all(&self) {
         unsafe {
-            _ = InvalidateRect(Some(self.hwnd), None, true);
+            _ = InvalidateRect(Some(self.hwnd.get()), None, true);
+        }
+    }
+
+    pub fn set_text(&self, text: &str) {
+        set_window_text(self.handle(), text);
+    }
+
+    pub fn set_font(&self, font: &Font) {
+        unsafe {
+            SendMessageW(
+                self.handle(),
+                WM_SETFONT,
+                Some(WPARAM(font.hfont.0 as usize)),
+                Some(LPARAM(1)),
+            );
         }
     }
 }

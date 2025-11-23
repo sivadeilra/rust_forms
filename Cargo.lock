@@ -164,6 +164,7 @@ dependencies = [
  "forms",
  "forms_build",
  "regex",
+ "tracing",
  "walkdir",
 ]
 

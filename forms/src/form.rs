@@ -35,12 +35,10 @@ pub(crate) struct FormState {
     stuck: StuckToThread,
 
     pub(crate) mdi_mode: MdiMode,
-    pub(crate) mdi_parent: Option<Form>,
 
-    pub(crate) mdi_client_hwnd: Cell<HWND>,
+    pub(crate) mdi_client: Option<Rc<ControlState>>,
 
-    pub(crate) control: OnceCell<ControlState>,
-    pub(crate) handle: Cell<HWND>,
+    pub(crate) control: Rc<ControlState>,
     quit_on_close: Option<i32>,
 
     is_layout_valid: Cell<bool>,
@@ -52,8 +50,8 @@ pub(crate) struct FormState {
     pub(crate) background_color: Cell<ColorRef>,
 
     command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
-    // notify_handler: OnceCell<Box<dyn Fn(&Notify)>>,
-    status_bar: Cell<Option<Rc<StatusBar>>>,
+
+    status_bar: Cell<Option<StatusBar>>,
 
     pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControl>>>,
 }
@@ -76,7 +74,7 @@ pub(crate) trait MessageHandlerTrait: 'static {
 impl std::ops::Deref for Form {
     type Target = ControlState;
     fn deref(&self) -> &Self::Target {
-        self.rc.control.get().unwrap()
+        &self.rc.control
     }
 }
 
@@ -86,12 +84,12 @@ impl Form {
     }
 
     pub(crate) fn handle(&self) -> HWND {
-        self.stuck.check();
-        self.rc.handle.get()
+        self.rc.stuck.check();
+        self.rc.control.handle()
     }
 
     pub fn show_window(&self) {
-        self.stuck.check();
+        self.rc.stuck.check();
         self.rc.ensure_layout_valid();
         unsafe {
             _ = ShowWindow(self.handle(), SW_SHOW);
@@ -99,8 +97,8 @@ impl Form {
     }
 
     pub fn set_title(&self, text: &str) {
-        self.stuck.check();
-        set_window_text(self.rc.handle.get(), text);
+        self.rc.stuck.check();
+        set_window_text(self.handle(), text);
     }
 
     pub fn style(&self) -> &Style {
@@ -108,15 +106,15 @@ impl Form {
     }
 
     pub fn set_menu(&self, menu: Option<Menu>) {
-        self.stuck.check();
+        self.rc.stuck.check();
         unsafe {
             if let Some(menu) = menu {
                 let hmenu = menu.extract();
-                if SetMenu(self.rc.handle.get(), Some(hmenu)).is_err() {
+                if SetMenu(self.handle(), Some(hmenu)).is_err() {
                     warn!("failed to set menu for form: {:?}", GetLastError());
                 }
             } else {
-                if SetMenu(self.rc.handle.get(), None).is_ok() {
+                if SetMenu(self.handle(), None).is_ok() {
                     trace!("cleared menu for form");
                 } else {
                     warn!("failed to clear menu for form");
@@ -125,8 +123,8 @@ impl Form {
         }
     }
 
-    pub fn create_status_bar(&self) -> Rc<StatusBar> {
-        self.stuck.check();
+    pub fn create_status_bar(&self) -> StatusBar {
+        self.rc.stuck.check();
         let sb = if let Some(sb) = self.rc.status_bar.take() {
             sb
         } else {
@@ -136,8 +134,8 @@ impl Form {
         sb
     }
 
-    pub fn get_status_bar(&self) -> Option<Rc<StatusBar>> {
-        self.stuck.check();
+    pub fn get_status_bar(&self) -> Option<StatusBar> {
+        self.rc.stuck.check();
         if let Some(sb) = self.rc.status_bar.take() {
             self.rc.status_bar.set(Some(sb.clone()));
             Some(sb)
@@ -212,7 +210,7 @@ impl FormState {
             }
 
             let mut client_rect: RECT = zeroed();
-            if GetClientRect(self.handle.get(), &mut client_rect).is_ok() {
+            if GetClientRect(self.control.handle(), &mut client_rect).is_ok() {
                 trace!(
                     "running layout, rect: {},{} - {},{}",
                     client_rect.left,
@@ -252,7 +250,7 @@ impl FormState {
 
 impl Form {
     pub fn set_layout(&self, layout: Layout) {
-        self.stuck.check();
+        self.rc.stuck.check();
         let mut layout_borrow = self.rc.layout.borrow_mut();
         *layout_borrow = Some(layout);
         drop(layout_borrow);
@@ -266,7 +264,7 @@ impl Form {
     }
 
     pub fn show_modal_under(&self, parent: Option<&Form>) {
-        self.stuck.check();
+        self.rc.stuck.check();
 
         let disabler: Option<DisabledFormScope> = if let Some(p) = parent {
             unsafe {
@@ -339,35 +337,6 @@ fn register_class_lazy() -> ATOM {
         class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
         class_ex.style = CS_HREDRAW | CS_VREDRAW;
         class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
-        class_ex.lpfnWndProc = Some(form_wndproc);
-        class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
-        class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
-
-        let atom = RegisterClassExW(&class_ex);
-        if atom == 0 {
-            panic!("Failed to register window class");
-        }
-        atom
-    })
-}
-
-static MDI_FRAME_CLASS_ATOM: OnceLock<ATOM> = OnceLock::new();
-
-const MDI_FRAME_CLASS_NAME: &str = "RustForms_MdiFrame";
-
-fn register_mdi_frame_class_lazy() -> ATOM {
-    *MDI_FRAME_CLASS_ATOM.get_or_init(|| unsafe {
-        let instance = get_instance();
-
-        let mut class_name_wstr = U16CString::from_str(MDI_FRAME_CLASS_NAME).unwrap();
-
-        let mut class_ex: WNDCLASSEXW = zeroed();
-        class_ex.cbSize = size_of::<WNDCLASSEXW>() as u32;
-        class_ex.hInstance = instance;
-        class_ex.lpszClassName = PCWSTR::from_raw(class_name_wstr.as_mut_ptr());
-        class_ex.style = WNDCLASS_STYLES(0); // CS_HREDRAW | CS_VREDRAW;
-        class_ex.hbrBackground = HBRUSH((COLOR_BTNFACE.0 + 1) as _);
-        // class_ex.lpfnWndProc = Some(form_wndproc_mdi_frame);
         class_ex.lpfnWndProc = Some(form_wndproc);
         class_ex.hCursor = LoadCursorW(None, IDC_ARROW).unwrap();
         class_ex.cbWndExtra = size_of::<*mut c_void>() as i32;
@@ -459,8 +428,6 @@ extern "system" fn form_wndproc_mdi_child(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    debug!("form_wndproc_mdi_child: message {}", message_str(message));
-
     unsafe {
         match message {
             wm::WM_CREATE => {
@@ -476,6 +443,7 @@ extern "system" fn form_wndproc_mdi_child(
                     (*create_struct).lpCreateParams
                 );
 
+                /*
                 let mdi_create_struct: &MDICREATESTRUCTW =
                     &*(create_params as *const MDICREATESTRUCTW);
 
@@ -484,6 +452,7 @@ extern "system" fn form_wndproc_mdi_child(
                 debug!(?form_state, "the for-reals Form pointer");
 
                 SetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0), form_state as isize);
+                */
                 return LRESULT(1);
             }
 
@@ -506,16 +475,19 @@ extern "system" fn form_wndproc(
                 let create_struct: *mut CREATESTRUCTW = lparam.0 as *mut CREATESTRUCTW;
                 assert!(!create_struct.is_null());
 
-                let create_params = (*create_struct).lpCreateParams;
-                assert!(!create_params.is_null());
-                // let form_state: &FormState = &*(create_params as *const FormState);
-
                 debug!(
                     "WM_CREATE, create params = {:?}",
                     (*create_struct).lpCreateParams
                 );
 
+                /*
+
+                let create_params = (*create_struct).lpCreateParams;
+                assert!(!create_params.is_null());
+                // let form_state: &FormState = &*(create_params as *const FormState);
+
                 SetWindowLongPtrW(window, WINDOW_LONG_PTR_INDEX(0), create_params as isize);
+                */
                 return LRESULT(1);
             }
 
@@ -582,12 +554,10 @@ extern "system" fn form_wndproc(
                 form.invalidate_layout();
                 form.ensure_layout_valid();
 
-                if form.mdi_mode == MdiMode::Frame {
-                    // let mut client_rect: RECT = core::mem::zeroed();
-                    // _ = GetClientRect(window, &mut client_rect);
+                if let Some(ref mdi_client) = form.mdi_client {
                     debug!("setting MDI client size to {} x {}", new_width, new_height);
                     _ = SetWindowPos(
-                        form.mdi_client_hwnd.get(),
+                        mdi_client.handle(),
                         None,
                         0,
                         0,
@@ -870,10 +840,6 @@ fn wparam_hiword(wp: WPARAM) -> u16 {
 
 impl Drop for FormState {
     fn drop(&mut self) {
-        self.stuck.check();
-
-        unsafe {
-            _ = DestroyWindow(self.handle.get());
-        }
+        // nothing right now
     }
 }

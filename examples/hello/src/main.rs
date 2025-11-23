@@ -4,19 +4,21 @@ use regex::Regex;
 use std::rc::Rc;
 use std::sync::mpsc;
 
+use tracing::debug;
+
 mod worker;
 use worker::*;
 
 struct AppState {
-    results: Rc<ListView>,
+    results: ListView,
     commands_sender: mpsc::Sender<WorkerCommand>,
-    query_button: Rc<Button>,
-    root_directory: Rc<Edit>,
-    regex: Rc<Edit>,
-    root_directory_label: Rc<Label>,
-    regex_label: Rc<Label>,
+    query_button: Button,
+    root_directory: Edit,
+    regex: Edit,
+    root_directory_label: Label,
+    regex_label: Label,
     messenger: Messenger,
-    status_bar: Rc<StatusBar>,
+    status_bar: StatusBar,
 }
 
 const CONTROL_ID_QUERY_BUTTON: ControlId = ControlId(1);
@@ -91,18 +93,12 @@ fn main() {
             ],
         },
         items: vec![
-            GridItem::new(0, 0, LayoutItem::Control(app.root_directory_label.clone())),
-            GridItem::new(0, 1, LayoutItem::Control(app.root_directory.clone())),
-            GridItem::new(1, 0, LayoutItem::Control(app.regex_label.clone())),
-            GridItem::new(1, 1, LayoutItem::Control(app.regex.clone())),
-            GridItem::new(1, 2, LayoutItem::Control(app.query_button.clone())),
-            GridItem {
-                row: 2,
-                row_span: 1,
-                col: 0,
-                col_span: 3,
-                item: LayoutItem::Control(app.results.clone()),
-            },
+            GridItem::new(0, 0, LayoutItem::control(&app.root_directory_label)),
+            GridItem::new(0, 1, LayoutItem::control(&app.root_directory)),
+            GridItem::new(1, 0, LayoutItem::control(&app.regex_label)),
+            GridItem::new(1, 1, LayoutItem::control(&app.regex)),
+            GridItem::new(1, 2, LayoutItem::control(&app.query_button)),
+            GridItem::new(2, 0, LayoutItem::control(&app.results)).col_span(3),
         ],
     }));
 
@@ -131,7 +127,9 @@ fn main() {
                     }
                 }
             }
-            _ => {}
+            (id, cmd) => {
+                debug!(?id, ?cmd, "command not recognized");
+            }
         });
     }
 

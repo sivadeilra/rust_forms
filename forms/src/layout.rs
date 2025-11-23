@@ -20,6 +20,8 @@ pub enum Layout {
     /// Child nodes are stacked horizontally (or vertically). Their position
     /// depends on their size. Extra space is left unused.
     Stack(stack::StackLayout),
+
+    Control(Rc<ControlState>),
 }
 
 impl Layout {
@@ -34,6 +36,7 @@ impl Layout {
         match self {
             Self::Grid(grid) => grid.place(placer, x, y, width, height),
             Self::Stack(stack) => stack.place(placer, x, y, width, height),
+            Self::Control(control) => placer.place_control(control, x, y, width, height),
         }
     }
 
@@ -41,6 +44,7 @@ impl Layout {
         match self {
             Self::Grid(grid) => grid.get_min_size(),
             Self::Stack(stack) => stack.min_size(),
+            Self::Control(_) => (0, 0),
         }
     }
 }
@@ -50,7 +54,7 @@ pub enum LayoutItem {
     /// The item is a nested layout.
     Layout(Box<Layout>),
     /// The item is a control.
-    Control(Rc<dyn core::ops::Deref<Target = ControlState>>),
+    Control(Rc<ControlState>),
 }
 
 impl core::fmt::Debug for LayoutItem {
@@ -72,6 +76,10 @@ impl core::fmt::Debug for LayoutItem {
 }
 
 impl LayoutItem {
+    pub fn control(c: &Rc<ControlState>) -> Self {
+        Self::Control(c.clone())
+    }
+
     pub(crate) fn place(
         &self,
         placer: &mut dyn LayoutPlacer,

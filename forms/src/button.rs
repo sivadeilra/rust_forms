@@ -2,13 +2,20 @@ use windows::core::w;
 
 use super::*;
 
+#[derive(Clone)]
 pub struct Button {
-    control: ControlState,
+    control: Rc<ControlState>,
+}
+
+impl AsRef<Rc<ControlState>> for Button {
+    fn as_ref(&self) -> &Rc<ControlState> {
+        &self.control
+    }
 }
 
 impl core::ops::Deref for Button {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
@@ -40,7 +47,7 @@ impl<'a> ButtonBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Rc<Button> {
+    pub fn build(self) -> Button {
         Button::build(self)
     }
 }
@@ -81,7 +88,7 @@ impl CheckState {
 }
 
 impl Button {
-    pub fn new(form: &Form, id: ControlId) -> Rc<Button> {
+    pub fn new(form: &Form, id: ControlId) -> Button {
         Self::builder(form, id).build()
     }
 
@@ -95,7 +102,7 @@ impl Button {
         }
     }
 
-    pub(crate) fn build(builder: ButtonBuilder) -> Rc<Button> {
+    pub(crate) fn build(builder: ButtonBuilder) -> Button {
         let form = builder.form;
 
         unsafe {
@@ -134,9 +141,9 @@ impl Button {
             )
             .unwrap();
 
-            let this = Rc::new(Button {
+            let this = Button {
                 control: ControlState::new(hwnd),
-            });
+            };
 
             this.set_font(&form.style().button_font);
 

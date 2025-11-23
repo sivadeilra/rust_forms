@@ -42,13 +42,8 @@ impl StackLayout {
         Self::new(Orientation::Horizontal, pitch)
     }
 
-    pub fn control<C>(mut self, control: &Rc<C>) -> Self
-    where
-        C: Deref<Target = ControlState> + 'static,
-    {
-        let r: Rc<C> = Rc::clone(control);
-        let rr: Rc<dyn Deref<Target = ControlState> + 'static> = r;
-        self.items.push(LayoutItem::Control(rr));
+    pub fn control(mut self, control: &Rc<ControlState>) -> Self {
+        self.items.push(LayoutItem::Control(control.clone()));
         self
     }
 

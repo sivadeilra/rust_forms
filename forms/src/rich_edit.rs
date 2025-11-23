@@ -17,7 +17,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 pub struct RichEdit {
-    control: ControlState,
+    control: Rc<ControlState>,
 }
 
 impl core::ops::Deref for RichEdit {

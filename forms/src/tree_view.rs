@@ -4,14 +4,14 @@ use super::*;
 use core::any::Any;
 
 impl core::ops::Deref for TreeView {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Self::Target {
         &self.control
     }
 }
 
 pub struct TreeView {
-    control: ControlState,
+    control: Rc<ControlState>,
 
     // key is HTREEITEM
     items: RefCell<HashMap<isize, Rc<NodeState>>>,

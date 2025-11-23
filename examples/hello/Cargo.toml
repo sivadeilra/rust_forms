@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 forms = { path = "../../forms" }
 regex = "1.5.4"
+tracing.workspace = true
 walkdir = "2.3.2"
 
 [build-dependencies]
