@@ -1,11 +1,12 @@
 use anyhow::Result;
 use std::rc::Rc;
 
-use forms::{Button, Edit, GridAxis, GridItem, GridLayout, Layout, LayoutItem, Mode, StackLayout};
+use forms::{Button, Edit, GridAxis, GridItem, GridLayout, Layout, Mode, StackLayout};
 
 use super::*;
 
 pub struct ModulesForm {
+    #[allow(dead_code)]
     pub form: Form,
     pub list_view: Rc<ListView>,
     pub search_text: Rc<Edit>,
@@ -41,16 +42,16 @@ impl ModulesForm {
 
         let buttons_layout = Layout::Stack(
             StackLayout::vertical(30)
-                .control(search_text.clone())
-                .control(search_button.clone()),
+                .control(&search_text)
+                .control(&search_button),
         );
 
         form.set_layout(Layout::Grid(GridLayout {
             rows: GridAxis::new().fixed(50).auto().fixed(50),
             cols: GridAxis::new().auto_min(300).fixed(200),
             items: vec![
-                GridItem::control(1, 0, list_view.clone()),
-                GridItem::new(1, 1, LayoutItem::Layout(Box::new(buttons_layout))),
+                GridItem::control(1, 0, &list_view),
+                GridItem::layout(1, 1, buttons_layout),
             ],
         }));
 
@@ -61,8 +62,8 @@ impl ModulesForm {
         }
     }
 
-    pub fn load_pdb(&mut self, pdb: &Pdb) -> Result<()> {
-        let modules = pdb.modules()?;
+    pub fn load_pdb(&mut self, pdb: &PdbKen) -> Result<()> {
+        let modules = pdb.pdb.modules()?;
 
         self.list_view.delete_all_items();
 

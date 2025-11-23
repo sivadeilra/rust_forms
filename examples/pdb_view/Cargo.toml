@@ -9,6 +9,8 @@ forms.workspace = true
 ms-pdb = "0.1.13"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+zerocopy = "0.8.28"
+sync_file = "0.2.9"
 
 [build-dependencies]
 forms_build.workspace = true

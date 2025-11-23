@@ -61,12 +61,8 @@ fn main() {
         regex: Edit::new(&form, CONTROL_ID_REGEX).with(|w| {
             w.set_text("fn");
         }),
-        root_directory_label: Label::new(&form).with(|w| {
-            w.set_text("Root dir:");
-        }),
-        regex_label: Label::new(&form).with(|w| {
-            w.set_text("Regex:");
-        }),
+        root_directory_label: Label::new(&form, "Root dir:"),
+        regex_label: Label::new(&form, "Regex:"),
         messenger: Messenger::new(),
         status_bar: form.create_status_bar(),
     });

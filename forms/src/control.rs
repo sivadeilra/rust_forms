@@ -213,24 +213,17 @@ commands! {
 }
 
 #[macro_export]
-macro_rules! count_of {
-    (,) => { 0 };
-    () => { 0 };
-    ($name:ident , $($t:tt)*) => { (1 + $crate::count_of!($($t)*)) };
-}
-
-#[macro_export]
 macro_rules! control_ids {
-    (,) => {};
-    () => {};
+    ($($name:ident,)*) => {
 
-    ($name:ident) => {
-        pub const $name: ControlId = ControlId(1);
-    };
+        #[allow(non_camel_case_types)]
+        #[repr(u16)]
+        enum __ControlIds {
+            $( $name, )*
+        }
 
-    ($name:ident , $($t:tt)*) => {
-        // pub const $name: ControlId = ControlId(count_of!( $($t)* ) + 1);
-        pub const $name: ControlId = ControlId(count_of!( $($t)* ) + 1);
-        control_ids!( $($t)* );
+        $(
+            pub const $name: ControlId = ControlId(__ControlIds::$name as u16);
+        )*
     }
 }

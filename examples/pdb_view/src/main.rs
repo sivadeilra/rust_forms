@@ -1,20 +1,29 @@
-//use ms_pdb::Pdb;
-
 mod modules_view;
+mod pdb_ken;
+mod symbols_view;
 
-use forms::{App, AppEvent, ControlId, Form, ListView, Notify, With};
+use forms::{App, AppEvent, ControlId, Form, ListView, Notify, With, control_ids};
 use ms_pdb::Pdb;
 use tracing::{debug, error};
 
 use crate::modules_view::ModulesForm;
+use crate::pdb_ken::PdbKen;
+use crate::symbols_view::SymbolsForm;
 
-const IDC_MODULES_SEARCH_BUTTON: ControlId = ControlId(1);
-const IDC_MODULES_SEARCH_EDIT: ControlId = ControlId(2);
+control_ids! {
+    IDC_MODULES_SEARCH_BUTTON,
+    IDC_MODULES_SEARCH_EDIT,
+
+    // SymbolsForm
+    IDC_SYMBOLS_SEARCH_BUTTON,
+    IDC_SYMBOLS_MODULE_FILTER_EDIT,
+    IDC_SYMBOLS_SYMBOL_NAME_FILTER_EDIT,
+}
 
 fn main() {
     let mut app = PdbView::new();
 
-    app.open_file(r"d:\temp\hello_world.pdb");
+    _ = app.open_file(r"d:\temp\hello_world.pdb");
 
     while let Some(event) = app.app.wait_event() {
         app.on_event(event);
@@ -24,11 +33,14 @@ fn main() {
 struct PdbView {
     app: App,
 
+    #[allow(dead_code)]
     main_form: Form,
 
     modules_form: ModulesForm,
 
-    pdb: Option<Box<Pdb>>,
+    symbols_form: SymbolsForm,
+
+    pdb: Option<PdbKen>,
 }
 
 impl PdbView {
@@ -46,30 +58,34 @@ impl PdbView {
 
         let modules_form = ModulesForm::new(&main_form);
 
+        let symbols_form = SymbolsForm::new(&main_form);
+
         Self {
             app,
             main_form,
             modules_form,
+            symbols_form,
             pdb: None,
         }
     }
 
-    fn open_file(&mut self, file_name: &str) {
+    fn open_file(&mut self, file_name: &str) -> anyhow::Result<()> {
         self.pdb = None;
 
         let pdb = match Pdb::open(file_name.as_ref()) {
-            Ok(pdb) => pdb,
+            Ok(pdb) => PdbKen::new(pdb)?,
             Err(e) => {
                 error!("failed to open PDB file: {e:?}");
-                return;
+                return Ok(());
             }
         };
 
         debug!("successfully opened PDB file.");
 
-        self.modules_form.load_pdb(&pdb);
+        _ = self.modules_form.load_pdb(&pdb);
 
         self.pdb = Some(pdb);
+        Ok(())
     }
 
     fn on_event(&mut self, event: AppEvent) {
@@ -81,6 +97,15 @@ impl PdbView {
                 notify: Notify::ButtonClicked,
             } => {
                 self.modules_form.on_search();
+            }
+
+            AppEvent::Notify {
+                control: IDC_SYMBOLS_SEARCH_BUTTON,
+                notify: Notify::ButtonClicked,
+            } => {
+                if let Some(pdb) = &mut self.pdb {
+                    _ = self.symbols_form.on_search(pdb);
+                }
             }
 
             AppEvent::Notify { control, notify } => {

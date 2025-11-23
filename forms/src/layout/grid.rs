@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::*;
 
 #[derive(Debug)]
@@ -142,8 +144,24 @@ impl GridItem {
         }
     }
 
-    pub fn control(row: u16, col: u16, c: Rc<dyn core::ops::Deref<Target = ControlState>>) -> Self {
-        Self::new(row, col, LayoutItem::Control(c))
+    pub fn control<C>(row: u16, col: u16, c: &Rc<C>) -> Self
+    where
+        C: Deref<Target = ControlState>,
+        C: 'static,
+    {
+        let r: Rc<C> = Rc::clone(c);
+        let dr: Rc<dyn Deref<Target = ControlState> + 'static> = r;
+        Self::new(row, col, LayoutItem::Control(dr))
+    }
+
+    pub fn layout(row: u16, col: u16, layout: Layout) -> Self {
+        Self {
+            row,
+            col,
+            row_span: 1,
+            col_span: 1,
+            item: LayoutItem::Layout(Box::new(layout)),
+        }
     }
 
     pub fn col_span(mut self, col_span: u16) -> Self {

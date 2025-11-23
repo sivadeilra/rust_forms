@@ -23,7 +23,7 @@ pub fn main() {
     form.set_layout(Layout::Grid(GridLayout {
         rows: GridAxis::new().auto(),
         cols: GridAxis::new().auto(),
-        items: vec![GridItem::control(0, 0, custom.clone())],
+        items: vec![GridItem::control(0, 0, &custom)],
     }));
 
     form.show_modal();

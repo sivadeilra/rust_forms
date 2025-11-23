@@ -328,8 +328,10 @@ dependencies = [
  "forms",
  "forms_build",
  "ms-pdb",
+ "sync_file",
  "tracing",
  "tracing-subscriber",
+ "zerocopy 0.8.28",
 ]
 
 [[package]]

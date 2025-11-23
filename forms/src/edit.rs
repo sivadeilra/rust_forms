@@ -49,6 +49,8 @@ impl Edit {
                 style.0 |= ES_WANTRETURN as u32;
             }
 
+            style |= WS_TABSTOP;
+
             let handle = CreateWindowExW(
                 ex_style,
                 PCWSTR::from_raw(class_name.as_ptr()),

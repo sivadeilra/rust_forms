@@ -111,7 +111,6 @@ impl ListView {
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/extended-list-view-styles
 
-    #[allow(dead_code)]
     fn get_ex_style(&self) -> WINDOW_EX_STYLE {
         unsafe {
             WINDOW_EX_STYLE(
