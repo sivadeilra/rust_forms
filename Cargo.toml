@@ -12,7 +12,7 @@ members = [
 widestring = "1.0.2"
 static_assertions = "1.0"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 windows = "0.62.2"
 windows-sys = "0.59.0"
 tokio = "1.45.0"

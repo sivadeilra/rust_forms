@@ -17,6 +17,7 @@ mod color;
 mod command;
 mod control;
 pub mod custom;
+mod dbg;
 mod edit;
 mod error;
 mod executor;
@@ -39,7 +40,6 @@ mod style;
 mod system_params;
 mod tab;
 pub mod tree_view;
-mod dbg;
 
 pub use app::*;
 pub use brush::{Brush, SysColor};
