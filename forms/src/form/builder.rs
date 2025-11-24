@@ -167,7 +167,7 @@ impl FormBuilder {
             // MDI frame. The MDI client window manages the CHILD windows.
             // (frame != client != child)
 
-            let mdi_client: Option<Rc<ControlState>> = if self.mdi_mode == MdiMode::Frame {
+            let mdi_client: Option<MdiClient> = if self.mdi_mode == MdiMode::Frame {
                 let ccs = CLIENTCREATESTRUCT {
                     hWindowMenu: HANDLE(null_mut()),
                     idFirstChild: 100,
@@ -191,13 +191,15 @@ impl FormBuilder {
                     Err(_) => panic!("Failed to create MDI client window"),
                 };
                 debug!("successfully created MDICLIENT");
-                Some(ControlState::new(mdi_client_hwnd, Some(control.clone())))
+                Some(MdiClient {
+                    control: ControlState::new(mdi_client_hwnd, Some(control.clone())),
+                })
             } else {
                 None
             };
 
             let layout: Option<Layout> = if let Some(ref mdi_client) = mdi_client {
-                Some(Layout::Control(mdi_client.clone()))
+                Some(Layout::Control(mdi_client.control.clone()))
             } else {
                 None
             };

@@ -19,7 +19,18 @@ impl TextForm {
             })
             .build();
 
-        let text_edit = Edit::new(&form, IDC_TEXT_FORM_EDIT);
+        let text_edit = Edit::new_with_options(
+            &form,
+            IDC_TEXT_FORM_EDIT,
+            EditOptions {
+                multiline: true,
+                ..Default::default()
+            },
+        )
+        .with(|b| {
+            b.set_readonly(true);
+        });
+
         form.set_layout(Layout::Grid(GridLayout {
             cols: GridAxis::new().auto(),
             rows: GridAxis::new().auto(),

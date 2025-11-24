@@ -4,12 +4,14 @@ use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
 use std::cell::OnceCell;
+use std::ops::Deref;
 use std::sync::{Once, OnceLock};
 use tracing::debug;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 use windows::Win32::UI::WindowsAndMessaging as wm;
 
 mod builder;
+mod mdi;
 
 pub use builder::*;
 
@@ -17,6 +19,18 @@ pub use builder::*;
 #[derive(Clone)]
 pub struct Form {
     pub(crate) rc: Rc<FormState>,
+}
+
+pub struct MdiClient {
+    control: Rc<ControlState>,
+}
+
+impl Deref for MdiClient {
+    type Target = Rc<ControlState>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.control
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -34,9 +48,9 @@ pub(crate) struct FormState {
 
     stuck: StuckToThread,
 
-    pub(crate) mdi_mode: MdiMode,
+    mdi_mode: MdiMode,
 
-    pub(crate) mdi_client: Option<Rc<ControlState>>,
+    pub(crate) mdi_client: Option<MdiClient>,
 
     pub(crate) control: Rc<ControlState>,
     quit_on_close: Option<i32>,
@@ -185,7 +199,7 @@ impl Form {
     }
     */
 
-    pub fn mdi_client(&self) -> Option<&Rc<ControlState>> {
+    pub fn mdi_client(&self) -> Option<&MdiClient> {
         self.rc.mdi_client.as_ref()
     }
 }
@@ -460,6 +474,11 @@ extern "system" fn form_wndproc_mdi_child(
                 return LRESULT(1);
             }
 
+            wm::WM_CLOSE => {
+                debug!("MDI child window received WM_CLOSE; ignoring");
+                return LRESULT(0);
+            }
+
             _ => {}
         }
 
@@ -558,10 +577,11 @@ extern "system" fn form_wndproc(
                 form.invalidate_layout();
                 form.ensure_layout_valid();
 
+                // TODO: is this now redundant, due to layout?
                 if let Some(ref mdi_client) = form.mdi_client {
                     debug!("setting MDI client size to {} x {}", new_width, new_height);
                     _ = SetWindowPos(
-                        mdi_client.handle(),
+                        mdi_client.control.handle(),
                         None,
                         0,
                         0,

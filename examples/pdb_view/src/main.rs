@@ -3,13 +3,17 @@ mod pdb_ken;
 mod symbols_view;
 mod text_form;
 
-use forms::{App, AppEvent, ControlId, Form, ListView, Notify, With, control_ids};
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use forms::{App, AppEvent, ControlId, Font, Form, ListView, Notify, With, control_ids};
 use ms_pdb::Pdb;
 use tracing::{debug, error};
 
 use crate::modules_view::{MODULES_COLUMN_ID, ModulesForm};
 use crate::pdb_ken::PdbKen;
 use crate::symbols_view::SymbolsForm;
+use crate::text_form::TextForm;
 
 control_ids! {
     // ModulesForm
@@ -46,6 +50,9 @@ struct PdbView {
 
     symbols_form: SymbolsForm,
 
+    text_views: HashMap<String, TextForm>,
+    text_views_font: Rc<Font>,
+
     pdb: Option<PdbKen>,
 }
 
@@ -72,6 +79,8 @@ impl PdbView {
             modules_form,
             symbols_form,
             pdb: None,
+            text_views: Default::default(),
+            text_views_font: Font::new("Consolas", 16).unwrap(),
         }
     }
 
@@ -119,26 +128,80 @@ impl PdbView {
                 notify: Notify::ItemDoubleClick { item, subitem },
             } => {
                 debug!(item, subitem, "double-click");
-
-                if let Some(selected) = self.modules_form.list_view.iter_selected_items().next() {
-                    let id_text = self
-                        .modules_form
-                        .list_view
-                        .get_item_text(selected, MODULES_COLUMN_ID as _);
-                    if let Ok(module_index) = id_text.parse() {
-                        let _: u32 = module_index;
-                        debug!(module_index);
-                    } else {
-                        // well that is a surprise
-                    }
-                } else {
-                    // double-clicked on nothing
-                }
+                self.on_modules_list_double_click();
             }
 
             AppEvent::Notify { control, notify } => {
                 debug!(?control, ?notify, "notify");
             }
         }
+    }
+
+    fn on_modules_list_double_click(&mut self) {
+        let Some(pdb) = self.pdb.as_ref() else {
+            debug!("no pdb active");
+            return;
+        };
+
+        let Some(selected) = self.modules_form.list_view.iter_selected_items().next() else {
+            debug!("no module selected");
+            return;
+        };
+
+        let id_text = self
+            .modules_form
+            .list_view
+            .get_item_text(selected, MODULES_COLUMN_ID as _);
+
+        let Ok(module_index) = id_text.parse() else {
+            // well that is a surprise
+            return;
+        };
+
+        let _: u32 = module_index;
+        debug!(module_index);
+
+        let text_view_name = format!("module/{module_index}");
+
+        if let Some(text_view) = self.text_views.get(&text_view_name) {
+            debug!("found existing text view, raising to top");
+            text_view.form.raise_to_top();
+
+            self.main_form
+                .mdi_client()
+                .unwrap()
+                .activate_child(&text_view.form);
+            return;
+        }
+
+        debug!("creating view...");
+
+        let Some(module) = pdb.modules.get(module_index as usize) else {
+            debug!("module index out of range");
+            return;
+        };
+
+        let text_form = TextForm::new(&self.main_form);
+
+        let mut s = String::new();
+
+        use std::fmt::Write;
+
+        _ = writeln!(s, "Module #{module_index}\r\n");
+        _ = writeln!(s, "\r\n");
+        _ = writeln!(s, "Module name: {}\r\n", module.module_name);
+        _ = writeln!(s, "Object file: {}\r\n", module.obj_file);
+        _ = writeln!(s);
+
+        if let Some(stream) = module.header.stream() {
+            _ = writeln!(s, "Module stream: {stream}\r\n");
+        } else {
+            _ = writeln!(s, "(no module stream)\r\n");
+        };
+
+        text_form.text_edit.set_font(&self.text_views_font);
+        text_form.text_edit.set_text(&s);
+
+        self.text_views.insert(text_view_name, text_form);
     }
 }

@@ -45,6 +45,10 @@ impl ControlState {
         self.stuck.check();
     }
 
+    pub(crate) fn parent(&self) -> Option<&Rc<ControlState>> {
+        self.parent.as_ref()
+    }
+
     pub(crate) fn new(hwnd: HWND, parent: Option<Rc<ControlState>>) -> Rc<Self> {
         Rc::new(Self {
             hwnd: Cell::new(hwnd),
@@ -137,6 +141,20 @@ impl ControlState {
                 rect.right - rect.left,
                 rect.bottom - rect.top,
                 SET_WINDOW_POS_FLAGS(0),
+            );
+        }
+    }
+
+    pub fn raise_to_top(&self) {
+        unsafe {
+            _ = SetWindowPos(
+                self.hwnd.get(),
+                Some(HWND_TOP), // insert after
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_SHOWWINDOW,
             );
         }
     }
