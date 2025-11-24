@@ -19,7 +19,7 @@ const STATUSCLASSNAME: &str = "msctls_statusbar32";
 impl StatusBar {
     pub fn new(form: &Form) -> Self {
         unsafe {
-            let parent_window = form.handle();
+            let parent_window = Rc::clone(form);
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(STATUSCLASSNAME);
             let ex_style = 0;
@@ -29,13 +29,13 @@ impl StatusBar {
             let hwnd = CreateStatusWindowW(
                 (WS_CHILD | WS_VISIBLE).0 as i32,
                 PCWSTR::from_raw(text.as_ptr()),
-                form.handle(),
+                parent_window.handle(),
                 0,
             )
             .unwrap();
 
             let state = StatusBar {
-                control: ControlState::new(hwnd),
+                control: ControlState::new(hwnd, Some(parent_window)),
             };
 
             _ = SendMessageW(

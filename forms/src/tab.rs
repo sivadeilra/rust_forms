@@ -46,6 +46,8 @@ impl TabControl {
     pub fn new(parent: &Form) -> Rc<Self> {
         register_class_lazy();
 
+        let parent_window = Rc::clone(parent);
+
         unsafe {
             let ex_style = WINDOW_EX_STYLE(0);
             let style = WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | WS_TABSTOP;
@@ -59,7 +61,7 @@ impl TabControl {
                 0,   // y
                 400, // width
                 400, // height
-                Some(parent.handle()),
+                Some(parent_window.handle()),
                 None, // hmenu
                 None, // instance
                 None, // lpparam
@@ -67,7 +69,7 @@ impl TabControl {
             .unwrap();
 
             let rc = Rc::new(Self {
-                control: ControlState::new(hwnd),
+                control: ControlState::new(hwnd, Some(parent_window)),
                 tabs: RefCell::new(Vec::new()),
             });
 
@@ -125,7 +127,7 @@ impl TabControl {
             let pane = Rc::new(TabPane {
                 layout: Default::default(),
                 layout_is_valid: Cell::new(false),
-                control: ControlState::new(tab_hwnd),
+                control: ControlState::new(tab_hwnd, Some(self.control.clone())),
             });
 
             {

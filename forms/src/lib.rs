@@ -39,8 +39,8 @@ mod status_bar;
 mod style;
 mod system_params;
 mod tab;
-pub mod tree_view;
 mod theme;
+pub mod tree_view;
 
 pub use app::*;
 pub use brush::{Brush, SysColor};

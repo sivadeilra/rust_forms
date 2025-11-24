@@ -72,7 +72,7 @@ pub(crate) trait MessageHandlerTrait: 'static {
 }
 
 impl std::ops::Deref for Form {
-    type Target = ControlState;
+    type Target = Rc<ControlState>;
     fn deref(&self) -> &Self::Target {
         &self.rc.control
     }
@@ -184,6 +184,10 @@ impl Form {
         );
     }
     */
+
+    pub fn mdi_client(&self) -> Option<&Rc<ControlState>> {
+        self.rc.mdi_client.as_ref()
+    }
 }
 
 impl FormState {

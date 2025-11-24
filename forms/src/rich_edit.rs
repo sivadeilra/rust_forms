@@ -21,15 +21,17 @@ pub struct RichEdit {
 }
 
 impl core::ops::Deref for RichEdit {
-    type Target = ControlState;
-    fn deref(&self) -> &ControlState {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Self::Target {
         &self.control
     }
 }
 
 impl RichEdit {
-    pub fn new(parent: &ControlState) -> Rc<RichEdit> {
+    pub fn new(parent: &Rc<ControlState>) -> Rc<RichEdit> {
         load_rich_edit_dll();
+
+        let parent: Rc<ControlState> = Rc::clone(parent);
 
         unsafe {
             let style =
@@ -53,7 +55,7 @@ impl RichEdit {
             .unwrap();
 
             Rc::new(RichEdit {
-                control: ControlState::new(handle),
+                control: ControlState::new(handle, Some(parent)),
             })
         }
     }

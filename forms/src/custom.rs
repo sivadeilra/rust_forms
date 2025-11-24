@@ -8,19 +8,28 @@ pub struct CustomControl<Inner>
 where
     Inner: CustomInner,
 {
-    control: Rc<ControlState>,
-    inner: Inner,
-
-    bouncer: MaybeUninit<Bouncer>,
+    /// We use a box so that the location of the state is stable, so that the wndproc can
+    /// dereference it.
+    state: Box<State<Inner>>,
 }
 
-trait Bounced {
-    fn wndproc(&self, hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT;
+/// This is what the window GWLP_USERDATA points to.
+#[repr(C)]
+struct PolymorphicStateHeader {
+    wndproc: unsafe fn(
+        polymorphic_state: *mut PolymorphicStateHeader,
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT,
 }
 
 #[repr(C)]
-struct Bouncer {
-    ptr: *const dyn Bounced,
+struct State<Inner> {
+    header: PolymorphicStateHeader,
+    inner: Inner,
+    control: Rc<ControlState>,
 }
 
 impl<Inner> std::ops::Deref for CustomControl<Inner>
@@ -30,7 +39,7 @@ where
     type Target = Rc<ControlState>;
 
     fn deref(&self) -> &Rc<ControlState> {
-        &self.control
+        &self.state.control
     }
 }
 
@@ -38,23 +47,15 @@ impl<Inner> CustomControl<Inner>
 where
     Inner: CustomInner + 'static,
 {
-    pub fn new(parent: &ControlState, inner: Inner) -> Rc<Self> {
+    pub fn new(parent: &Rc<ControlState>, inner: Inner) -> Self {
         let atom = register_class_lazy();
 
         let ex_style = Default::default();
         let style = WS_VISIBLE | WS_CLIPSIBLINGS | WS_CHILD | WS_TABSTOP;
 
-        unsafe {
-            let mut me = Rc::new(Self {
-                control: ControlState::new(HWND(null_mut())),
-                inner,
-                bouncer: MaybeUninit::zeroed(),
-            });
-            let only_me = Rc::get_mut(&mut me).unwrap();
-            let the_ptr: *const dyn Bounced = only_me as &dyn Bounced;
-            only_me.bouncer.write(Bouncer { ptr: the_ptr }); // make a self-referential structure
-            let bouncer_ptr = only_me.bouncer.as_mut_ptr();
+        let parent = Rc::clone(parent);
 
+        unsafe {
             let hwnd = CreateWindowExW(
                 ex_style,
                 PCWSTR(atom as *const u16),
@@ -65,26 +66,38 @@ where
                 400, // width
                 400, // height
                 Some(parent.handle()),
-                None,                          // hmenu
-                None,                          // instance
-                Some(bouncer_ptr as *const _), // lpparam
+                None, // hmenu
+                None, // instance
+                None, // Some(bouncer_ptr as *const _), // lpparam
             )
             .unwrap();
 
             debug!("created custom control");
 
-            let only_me = Rc::get_mut(&mut me).unwrap();
-            only_me.control.hwnd.set(hwnd);
+            let control = ControlState::new(hwnd, Some(parent));
 
-            me
+            let boxed_state: Box<State<Inner>> = Box::new(State {
+                header: PolymorphicStateHeader {
+                    wndproc: custom_wndproc_generic::<Inner>,
+                },
+                inner,
+                control,
+            });
+
+            let state_ref: &State<Inner> = &*boxed_state;
+            let state_ptr: *const State<Inner> = state_ref;
+
+            SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), state_ptr as isize);
+
+            Self { state: boxed_state }
         }
     }
 }
 
 pub trait CustomInner: Sized {
-    fn paint(&self, control: &CustomControl<Self>, dc: &Dc, rect: &Rect) {}
-    fn mouse_move(&self, control: &CustomControl<Self>, pt: POINT) {}
-    fn mouse_leave(&self, control: &CustomControl<Self>) {}
+    fn paint(&self, control: &ControlState, dc: &Dc, rect: &Rect) {}
+    fn mouse_move(&self, control: &ControlState, pt: POINT) {}
+    fn mouse_leave(&self, control: &ControlState) {}
 }
 
 static REGISTER_CLASS_ONCE: Once = Once::new();
@@ -124,68 +137,74 @@ unsafe extern "system" fn custom_wndproc(
         WM_CREATE => {
             let create_struct = lparam.0 as *const CREATESTRUCTW;
             let create_params = (*create_struct).lpCreateParams; // <-- this points to Bouncer
-            let bouncer: *const Bouncer = create_params as *const Bouncer;
-            debug!("custom_wndproc: WM_CREATE, bouncer: {bouncer:?}");
-            SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), bouncer as isize);
+                                                                 // let bouncer: *const Bouncer = create_params as *const Bouncer;
+                                                                 // debug!("custom_wndproc: WM_CREATE, bouncer: {bouncer:?}");
+                                                                 // SetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0), bouncer as isize);
             return DefWindowProcW(hwnd, message, wparam, lparam);
         }
 
         _ => {}
     }
 
-    let bouncer_ptr: isize = GetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0));
-    if bouncer_ptr == 0 {
+    let polymorphic_state_header: *mut PolymorphicStateHeader =
+        GetWindowLongPtrW(hwnd, WINDOW_LONG_PTR_INDEX(0)) as _;
+    if polymorphic_state_header.is_null() {
         // debug!("custom_wndproc: message 0x{message:04x} - no bouncer");
         return DefWindowProcW(hwnd, message, wparam, lparam);
     }
 
-    // debug!("custom_wndproc: message 0x{message:04x}");
-    let bouncer: *const Bouncer = bouncer_ptr as *const Bouncer;
-    let dyn_ptr = (*bouncer).ptr;
-    (*dyn_ptr).wndproc(hwnd, message, wparam, lparam)
+    let inner_wndproc = (*polymorphic_state_header).wndproc;
+    inner_wndproc(polymorphic_state_header, hwnd, message, wparam, lparam)
 }
 
-impl<Inner> Bounced for CustomControl<Inner>
-where
-    Inner: CustomInner,
-{
-    fn wndproc(&self, hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        unsafe {
-            use windows::Win32::UI::WindowsAndMessaging as wm;
+unsafe fn custom_wndproc_generic<Inner: CustomInner>(
+    polymorphic_state: *mut PolymorphicStateHeader,
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    let state_ptr = polymorphic_state as *mut State<Inner>;
 
-            match message {
-                /*
-                WM_COMMAND | WM_NOTIFY => {
-                    // Forward WM_COMMAND and WM_NOTIFY up the window tree.
-                    let parent_hwnd = GetParent(hwnd);
-                    return SendMessageW(parent_hwnd, message, wparam, lparam);
-                }
-                */
-                WM_PAINT => {
-                    let mut paint: PAINTSTRUCT = core::mem::zeroed();
-                    BeginPaint(hwnd, &mut paint);
+    let state = &*state_ptr;
 
-                    let dc = Dc { hdc: paint.hdc };
+    unsafe {
+        use windows::Win32::UI::WindowsAndMessaging as wm;
 
-                    self.inner.paint(self, &dc, &rect_to_rectl(&paint.rcPaint));
+        match message {
+            /*
+            WM_COMMAND | WM_NOTIFY => {
+                // Forward WM_COMMAND and WM_NOTIFY up the window tree.
+                let parent_hwnd = GetParent(hwnd);
+                return SendMessageW(parent_hwnd, message, wparam, lparam);
+            }
+            */
+            WM_PAINT => {
+                let mut paint: PAINTSTRUCT = core::mem::zeroed();
+                BeginPaint(hwnd, &mut paint);
 
-                    _ = EndPaint(hwnd, &paint);
-                }
+                let dc = Dc { hdc: paint.hdc };
 
-                WM_MOUSEMOVE => {
-                    let x = get_x_lparam(lparam) as i32;
-                    let y = get_y_lparam(lparam) as i32;
-                    self.inner.mouse_move(self, POINT { x, y });
-                }
+                state
+                    .inner
+                    .paint(&state.control, &dc, &rect_to_rectl(&paint.rcPaint));
 
-                WM_MOUSELEAVE => {
-                    self.inner.mouse_leave(self);
-                }
-
-                _ => {}
+                _ = EndPaint(hwnd, &paint);
             }
 
-            DefWindowProcW(hwnd, message, wparam, lparam)
+            WM_MOUSEMOVE => {
+                let x = get_x_lparam(lparam) as i32;
+                let y = get_y_lparam(lparam) as i32;
+                state.inner.mouse_move(&state.control, POINT { x, y });
+            }
+
+            WM_MOUSELEAVE => {
+                state.inner.mouse_leave(&state.control);
+            }
+
+            _ => {}
         }
+
+        DefWindowProcW(hwnd, message, wparam, lparam)
     }
 }

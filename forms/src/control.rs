@@ -3,8 +3,20 @@ use super::*;
 static_assertions::assert_not_impl_any!(ControlState: Send, Sync);
 
 pub struct ControlState {
-    pub(crate) stuck: StuckToThread,
-    pub(crate) hwnd: Cell<HWND>,
+    stuck: StuckToThread,
+    hwnd: Cell<HWND>,
+
+    /// This exists for its side effects.  It prevents parent windows from being deleted before
+    /// all of the child windows are deleted.
+    ///
+    /// It is VERY important to avoid creating reference cycles.  Semantic objects, such as `ListView`,
+    /// contain "downward" pointers, which point "down" the tree.  User (app) objects generally
+    /// contain semantic objects, so they also point "down" the tree.
+    ///
+    /// These upward links (this `parent`) chain should never point to semantic objects, only to
+    /// `ControlState`. By doing so, we prevent cycles.
+    #[allow(dead_code)]
+    parent: Option<Rc<ControlState>>,
 }
 
 impl Drop for ControlState {
@@ -33,10 +45,11 @@ impl ControlState {
         self.stuck.check();
     }
 
-    pub(crate) fn new(hwnd: HWND) -> Rc<Self> {
+    pub(crate) fn new(hwnd: HWND, parent: Option<Rc<ControlState>>) -> Rc<Self> {
         Rc::new(Self {
             hwnd: Cell::new(hwnd),
             stuck: StuckToThread::new(),
+            parent,
         })
     }
 

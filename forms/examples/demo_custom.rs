@@ -34,7 +34,7 @@ struct MyStuff {
 }
 
 impl custom::CustomInner for MyStuff {
-    fn paint(&self, _control: &CustomControl<Self>, dc: &gdi::dc::Dc, _rect: &Rect) {
+    fn paint(&self, _control: &ControlState, dc: &gdi::dc::Dc, _rect: &Rect) {
         dc.text_out_a(20, 20, "what up".as_bytes());
 
         if let Some(pos) = self.mouse_pos.get() {
@@ -53,12 +53,12 @@ impl custom::CustomInner for MyStuff {
         }
     }
 
-    fn mouse_move(&self, control: &CustomControl<Self>, pt: POINT) {
+    fn mouse_move(&self, control: &ControlState, pt: POINT) {
         self.mouse_pos.set(Some(pt));
         control.invalidate_all();
     }
 
-    fn mouse_leave(&self, control: &CustomControl<Self>) {
+    fn mouse_leave(&self, control: &ControlState) {
         println!("mouse_leave");
         self.mouse_pos.set(None);
         control.invalidate_all();

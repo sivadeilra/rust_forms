@@ -15,9 +15,9 @@ impl core::ops::Deref for ListView {
 const WC_LISTVIEW: &str = "SysListView32";
 
 impl ListView {
-    pub fn new(parent_control: &ControlState, control_id: Option<ControlId>) -> ListView {
+    pub fn new(parent_control: &Rc<ControlState>, control_id: Option<ControlId>) -> ListView {
         unsafe {
-            let parent_window = parent_control.handle();
+            let parent: Rc<ControlState> = Rc::clone(parent_control);
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate(WC_LISTVIEW);
             let ex_style = WINDOW_EX_STYLE(0);
@@ -31,7 +31,7 @@ impl ListView {
                 0,
                 0,
                 0,
-                Some(parent_window),
+                Some(parent.handle()),
                 Some(HMENU(if let Some(id) = control_id {
                     id.0 as _
                 } else {
@@ -45,7 +45,7 @@ impl ListView {
             };
 
             ListView {
-                control: ControlState::new(hwnd),
+                control: ControlState::new(hwnd, Some(parent)),
             }
         }
     }

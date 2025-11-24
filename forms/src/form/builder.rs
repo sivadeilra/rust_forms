@@ -158,7 +158,8 @@ impl FormBuilder {
                 }
             }
 
-            let control = ControlState::new(handle);
+            // TODO: pass parent form handle?
+            let control = ControlState::new(handle, None);
 
             // If we are creating an MDI Frame, then create the MDI Client window. The MDI Client
             // is provided by the system; we do not provide a wndproc for it. It handles positioning
@@ -190,7 +191,7 @@ impl FormBuilder {
                     Err(_) => panic!("Failed to create MDI client window"),
                 };
                 debug!("successfully created MDICLIENT");
-                Some(ControlState::new(mdi_client_hwnd))
+                Some(ControlState::new(mdi_client_hwnd, Some(control.clone())))
             } else {
                 None
             };
@@ -241,9 +242,6 @@ impl FormBuilder {
                 Err(_e) => {}
             }
             */
-
-            // If we just constructed an MDI frame, then add a default layout which places the MDI
-            // client within the entire client rect.
 
             Form { rc: form_alloc }
         }

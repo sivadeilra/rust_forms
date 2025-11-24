@@ -15,7 +15,7 @@ impl core::ops::Deref for Label {
 impl Label {
     pub fn new(form: &Form, text: &str) -> Self {
         unsafe {
-            let parent_window = form.handle();
+            let parent_window: Rc<ControlState> = Rc::clone(form);
             let window_name = WCString::from_str_truncate("");
             let class_name_wstr = WCString::from_str_truncate("STATIC");
             let ex_style = WINDOW_EX_STYLE(0);
@@ -29,14 +29,14 @@ impl Label {
                 0,
                 0,
                 0,
-                Some(parent_window),
+                Some(parent_window.handle()),
                 None,                 // hmenu,
                 Some(get_instance()), // hinstance,
                 None,
             )
             .unwrap();
 
-            let control = ControlState::new(hwnd);
+            let control = ControlState::new(hwnd, Some(parent_window));
             control.set_font(&form.rc.style.static_font);
             control.set_text(text);
 

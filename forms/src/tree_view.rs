@@ -39,7 +39,7 @@ impl TreeView {
 
     pub fn new(form: &Form, options: &TreeViewOptions) -> Rc<TreeView> {
         unsafe {
-            let parent_window = form.handle();
+            let parent_window: Rc<ControlState> = Rc::clone(form);
             let class_name_wstr = WCString::from_str_truncate(WC_TREEVIEW);
             let ex_style = 0;
 
@@ -75,7 +75,7 @@ impl TreeView {
                 0,
                 0,
                 0,
-                Some(parent_window),
+                Some(parent_window.handle()),
                 None,
                 Some(get_instance()),
                 None,
@@ -85,7 +85,7 @@ impl TreeView {
             form.rc.invalidate_layout();
 
             Rc::new(TreeView {
-                control: ControlState::new(hwnd),
+                control: ControlState::new(hwnd, Some(parent_window)),
                 items: RefCell::new(HashMap::new()),
             })
         }

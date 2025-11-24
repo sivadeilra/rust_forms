@@ -51,6 +51,8 @@ impl Edit {
 
             style |= WS_TABSTOP;
 
+            let parent: Rc<ControlState> = Rc::clone(form);
+
             let handle = CreateWindowExW(
                 ex_style,
                 PCWSTR::from_raw(class_name.as_ptr()),
@@ -60,14 +62,14 @@ impl Edit {
                 0,
                 0,
                 0,
-                Some(form.handle()),
+                Some(parent.handle()),
                 Some(HMENU(control_id.0 as _)), // menu
                 None,                           // instance
-                None, // form_alloc.as_mut() as *mut UnsafeCell<FormState> as *mut c_void,
+                None,
             )
             .unwrap();
 
-            let control = ControlState::new(handle);
+            let control = ControlState::new(handle, Some(parent));
             control.set_font(&form.rc.style.edit_font);
             Edit { control }
         }
