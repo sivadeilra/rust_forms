@@ -98,7 +98,7 @@ impl FormBuilder {
 
             match self.mdi_mode {
                 MdiMode::None | MdiMode::Frame => {
-                    let window_class_atom = register_class_lazy();
+                    let window_class_atom = wndproc::register_class_lazy();
                     handle = match CreateWindowExW(
                         ex_style,
                         PCWSTR::from_raw(window_class_atom as usize as *const u16),
@@ -121,7 +121,7 @@ impl FormBuilder {
                 }
 
                 MdiMode::Child => {
-                    let child_class_atom = register_mdi_child_lazy();
+                    let child_class_atom = wndproc::register_mdi_child_lazy();
                     let mdi_parent_form = self.mdi_parent.as_ref().unwrap();
 
                     let mdi_create = MDICREATESTRUCTW {
