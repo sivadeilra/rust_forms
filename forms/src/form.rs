@@ -17,7 +17,6 @@ mod wndproc;
 pub use builder::*;
 
 /// A top-level window.
-#[derive(Clone)]
 pub struct Form {
     pub(crate) rc: Rc<FormState>,
 }
@@ -337,6 +336,12 @@ impl Drop for DisabledFormScope {
         unsafe {
             _ = EnableWindow(self.form, true);
         }
+    }
+}
+
+impl Drop for Form {
+    fn drop(&mut self) {
+        // Break cycles inside form state
     }
 }
 

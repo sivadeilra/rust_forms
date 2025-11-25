@@ -1,7 +1,7 @@
 use super::*;
 use windows::core::w;
 
-pub struct FormBuilder {
+pub struct FormBuilder<'a> {
     pub(crate) app: App,
     pub(crate) title: String,
     pub(crate) size: Option<(i32, i32)>,
@@ -9,21 +9,21 @@ pub struct FormBuilder {
     pub(crate) quit_on_close: Option<i32>,
     pub(crate) style: Option<Rc<Style>>,
 
-    pub(crate) mdi_parent: Option<Form>,
+    pub(crate) mdi_parent: Option<&'a MdiClient>,
     pub(crate) mdi_mode: MdiMode,
 }
 
-impl FormBuilder {
+impl<'a> FormBuilder<'a> {
     // pub fn parent(&mut self, parent: &Form) -> &mut Self {
     //     self.args.parent = Some(parent);
     //     self
     // }
 
-    pub fn mdi_parent(&mut self, parent: &Form) -> &mut Self {
+    pub fn mdi_parent(&mut self, parent: &'a Form) -> &mut Self {
         assert!(parent.rc.mdi_mode == MdiMode::Frame);
         assert!(self.mdi_mode == MdiMode::None);
         self.mdi_mode = MdiMode::Child;
-        self.mdi_parent = Some(parent.clone());
+        self.mdi_parent = parent.mdi_client();
         self.no_quit_on_close();
         self
     }
@@ -122,7 +122,7 @@ impl FormBuilder {
 
                 MdiMode::Child => {
                     let child_class_atom = wndproc::register_mdi_child_lazy();
-                    let mdi_parent_form = self.mdi_parent.as_ref().unwrap();
+                    let mdi_parent_form = self.mdi_parent.unwrap();
 
                     let mdi_create = MDICREATESTRUCTW {
                         szClass: PCWSTR::from_raw(child_class_atom as usize as *const u16),
@@ -136,10 +136,7 @@ impl FormBuilder {
                         lParam: LPARAM(create_params_lparam as isize), // lparam
                     };
 
-                    let Some(ref parent_mdi_client) = mdi_parent_form.rc.mdi_client else {
-                        panic!("Parent form must be an MDI Frame");
-                    };
-                    let mdi_client_hwnd = parent_mdi_client.handle();
+                    let mdi_client_hwnd = mdi_parent_form.handle();
                     assert!(!mdi_client_hwnd.is_invalid());
 
                     about_to_create_window();

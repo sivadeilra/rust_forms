@@ -94,7 +94,7 @@ impl App {
         }
     }
 
-    pub fn form_builder(&self) -> FormBuilder {
+    pub fn form_builder(&self) -> FormBuilder<'_> {
         FormBuilder {
             app: self.clone(),
             title: "Form".to_string(),

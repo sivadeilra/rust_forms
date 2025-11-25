@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use forms::{grid::*, *};
 use tracing::debug;
 
@@ -75,6 +77,8 @@ fn main() {
             },
         ],
     }));
+
+    let form = Rc::new(form);
 
     form.command_handler({
         let form = form.clone();
