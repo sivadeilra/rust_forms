@@ -1,3 +1,4 @@
+use crate::ControlId;
 use crate::ControlState;
 use crate::Form;
 use std::mem::zeroed;
@@ -6,14 +7,11 @@ use std::sync::Once;
 use widestring::U16CString;
 use windows::core::w;
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::LPARAM;
-use windows::Win32::Foundation::WPARAM;
+use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::System::LibraryLoader::LoadLibraryW;
-use windows::Win32::UI::WindowsAndMessaging::SendMessageW;
-use windows::Win32::UI::WindowsAndMessaging::WINDOW_STYLE;
-use windows::Win32::UI::WindowsAndMessaging::WM_USER;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, ES_MULTILINE, WINDOW_EX_STYLE, WS_BORDER, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
+    CreateWindowExW, SendMessageW, ES_MULTILINE, HMENU, WINDOW_EX_STYLE, WINDOW_STYLE, WM_USER,
+    WS_BORDER, WS_CHILD, WS_TABSTOP, WS_VISIBLE,
 };
 
 pub struct RichEdit {
@@ -28,7 +26,7 @@ impl core::ops::Deref for RichEdit {
 }
 
 impl RichEdit {
-    pub fn new(parent: &Rc<ControlState>) -> Rc<RichEdit> {
+    pub fn new(parent: &Rc<ControlState>, control_id: ControlId) -> RichEdit {
         load_rich_edit_dll();
 
         let parent: Rc<ControlState> = Rc::clone(parent);
@@ -48,15 +46,15 @@ impl RichEdit {
                 0,
                 0,
                 Some(parent.handle()),
-                None, // menu
-                None, // instance
+                Some(HMENU(control_id.0 as _)), // menu
+                None,                           // instance
                 None,
             )
             .unwrap();
 
-            Rc::new(RichEdit {
+            RichEdit {
                 control: ControlState::new(handle, Some(parent)),
-            })
+            }
         }
     }
 
