@@ -6,11 +6,15 @@ use core::any::Any;
 impl core::ops::Deref for TreeView {
     type Target = Rc<ControlState>;
     fn deref(&self) -> &Self::Target {
-        &self.control
+        &self.inner.control
     }
 }
 
 pub struct TreeView {
+    inner: Rc<TreeViewInner>,
+}
+
+struct TreeViewInner {
     control: Rc<ControlState>,
 
     // key is HTREEITEM
@@ -32,12 +36,12 @@ const WC_TREEVIEW: &str = "SysTreeView32";
 
 impl TreeView {
     pub fn set_visible(&self, value: bool) {
-        let style = self.control.get_window_style();
+        let style = self.inner.control.get_window_style();
         let new_style = (style & !WS_VISIBLE) | (if value { WS_VISIBLE } else { WINDOW_STYLE(0) });
-        self.control.set_window_style(new_style);
+        self.inner.control.set_window_style(new_style);
     }
 
-    pub fn new(form: &Form, options: &TreeViewOptions) -> Rc<TreeView> {
+    pub fn new(form: &Form, options: &TreeViewOptions) -> TreeView {
         unsafe {
             let parent_window: Rc<ControlState> = Rc::clone(form);
             let class_name_wstr = WCString::from_str_truncate(WC_TREEVIEW);
@@ -84,25 +88,30 @@ impl TreeView {
 
             form.rc.invalidate_layout();
 
-            Rc::new(TreeView {
-                control: ControlState::new(hwnd, Some(parent_window)),
-                items: RefCell::new(HashMap::new()),
-            })
+            TreeView {
+                inner: Rc::new(TreeViewInner {
+                    control: ControlState::new(hwnd, Some(parent_window)),
+                    items: RefCell::new(HashMap::new()),
+                }),
+            }
         }
     }
 
     pub fn get_has_lines(&self) -> bool {
-        self.control
+        self.inner
+            .control
             .get_window_style_flag(WINDOW_STYLE(TVS_HASLINES))
     }
 
     pub fn set_has_lines(&self, value: bool) {
-        self.control
+        self.inner
+            .control
             .set_window_style_flag(WINDOW_STYLE(TVS_HASLINES), value);
     }
 
     pub fn set_check_boxes(&self, value: bool) {
-        self.control
+        self.inner
+            .control
             .set_window_style_flag(WINDOW_STYLE(TVS_CHECKBOXES), value);
     }
 
@@ -110,14 +119,22 @@ impl TreeView {
 
     #[allow(dead_code)]
     fn get_ex_style(&self) -> u32 {
-        unsafe { SendMessageW(self.control.handle(), TVM_GETEXTENDEDSTYLE, None, None).0 as u32 }
+        unsafe {
+            SendMessageW(
+                self.inner.control.handle(),
+                TVM_GETEXTENDEDSTYLE,
+                None,
+                None,
+            )
+            .0 as u32
+        }
     }
 
     // https://docs.microsoft.com/en-us/windows/win32/controls/tvm-setextendedstyle
     fn set_ex_style(&self, mask: u32, values: u32) {
         unsafe {
             SendMessageW(
-                self.control.handle(),
+                self.inner.control.handle(),
                 TVM_SETEXTENDEDSTYLE,
                 Some(WPARAM(mask as usize)),
                 Some(LPARAM(values as isize)),
@@ -133,10 +150,12 @@ impl TreeView {
         self.set_ex_style_flag(TVS_EX_DOUBLEBUFFER, value);
     }
 
-    pub fn insert_root(self: &Rc<Self>, item: &str) -> TreeNode {
-        self.insert_at(TVI_ROOT, item)
+    pub fn insert_root(&self, item: &str) -> TreeNode {
+        self.inner.insert_at(TVI_ROOT, item)
     }
+}
 
+impl TreeViewInner {
     fn insert_at(self: &Rc<Self>, parent_hitem: HTREEITEM, text: &str) -> TreeNode {
         unsafe {
             let mut item: TVINSERTSTRUCTW = zeroed();
@@ -144,7 +163,7 @@ impl TreeView {
             item.hInsertAfter = TVI_LAST;
 
             let itemex = &mut item.Anonymous.itemex;
-            itemex.hwnd = self.handle();
+            itemex.hwnd = self.control.handle();
             itemex.mask = TVIF_TEXT;
 
             let text_wstr = WCString::from_str(text).unwrap();
@@ -152,7 +171,7 @@ impl TreeView {
 
             let hitem = HTREEITEM(
                 SendMessageW(
-                    self.handle(),
+                    self.control.handle(),
                     TVM_INSERTITEM,
                     None,
                     Some(LPARAM(&item as *const _ as isize)),
@@ -191,7 +210,7 @@ pub struct NewItem<'a> {
 
 #[derive(Clone)]
 pub struct TreeNode {
-    tree: Rc<TreeView>,
+    tree: Rc<TreeViewInner>,
     state: Rc<NodeState>,
 }
 
@@ -243,7 +262,7 @@ impl TreeNode {
 
         let mut items = self.tree.items.borrow_mut();
 
-        remove_items_rec(self.tree.handle(), self.state.hitem, &mut items);
+        remove_items_rec(self.tree.control.handle(), self.state.hitem, &mut items);
         assert!(self.state.deleted.get());
 
         // This should delete hitem and all of the items below it.
@@ -251,7 +270,7 @@ impl TreeNode {
         // `deleted` field of each one, we should be good.
         unsafe {
             _ = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_DELETEITEM,
                 None,
                 Some(LPARAM(self.state.hitem.0)),
@@ -267,7 +286,7 @@ impl TreeNode {
             }
 
             _ = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_EXPAND,
                 Some(WPARAM(TVE_EXPAND.0 as usize)),
                 Some(LPARAM(self.state.hitem.0)),
@@ -282,7 +301,7 @@ impl TreeNode {
             }
 
             _ = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_EXPAND,
                 Some(WPARAM(TVE_COLLAPSE.0 as usize)),
                 Some(LPARAM(self.state.hitem.0)),
@@ -297,7 +316,7 @@ impl TreeNode {
             }
 
             _ = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_EXPAND,
                 Some(WPARAM(TVE_TOGGLE.0 as usize)),
                 Some(LPARAM(self.state.hitem.0)),
@@ -312,7 +331,7 @@ impl TreeNode {
             }
 
             _ = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_ENSUREVISIBLE,
                 None,
                 Some(LPARAM(self.state.hitem.0)),
@@ -327,7 +346,7 @@ impl TreeNode {
             }
 
             let state = SendMessageW(
-                self.tree.handle(),
+                self.tree.control.handle(),
                 TVM_GETITEMSTATE,
                 Some(WPARAM(self.state.hitem.0 as usize)),
                 Some(LPARAM(TVIF_STATEEX.0 as isize)),
