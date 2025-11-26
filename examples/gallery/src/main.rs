@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use forms::{grid::*, *};
 use tracing::debug;
@@ -80,23 +80,32 @@ fn main() {
 
     let form = Rc::new(form);
 
-    form.command_handler({
-        let form = form.clone();
-        Box::new(move |control, command| match (control, command) {
-            (IDC_DEMO_TREE_VIEW, Command::ButtonClicked) => {
+    let _form_of = form.command_handler(FormData {
+        form: Rc::downgrade(&form),
+    });
+
+    form.show_modal();
+}
+
+struct FormData {
+    form: Weak<Form>,
+}
+
+impl FormHandler for FormData {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        let form = self.form.upgrade().unwrap();
+
+        match (control, notify) {
+            (IDC_DEMO_TREE_VIEW, Notify::ButtonClicked) => {
                 debug!("demoing tree view");
             }
 
-            (IDC_DEMO_LIST_VIEW, Command::ButtonClicked) => {
+            (IDC_DEMO_LIST_VIEW, Notify::ButtonClicked) => {
                 debug!("demoing list view");
                 list_view::demo_list_view(&form);
             }
 
-            _ => {
-                debug!("command handler: {control:?} {command:?}");
-            }
-        })
-    });
-
-    form.show_modal();
+            _ => {}
+        }
+    }
 }

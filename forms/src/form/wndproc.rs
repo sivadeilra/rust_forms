@@ -141,335 +141,285 @@ extern "system" fn form_wndproc(
         }
 
         let form: &FormState = &*(form_ptr as *const FormState);
-
         let app: &App = &form.app;
 
-        match message {
-            wm::WM_PAINT => {
-                debug!("WM_PAINT");
-                // ValidateRect(window, std::ptr::null());
+        'goto_default: {
+            match message {
+                wm::WM_PAINT => {
+                    debug!("WM_PAINT");
+                    // ValidateRect(window, std::ptr::null());
 
-                let mut ps: PAINTSTRUCT = core::mem::zeroed();
-                let hdc: HDC = BeginPaint(window, &mut ps);
+                    let mut ps: PAINTSTRUCT = core::mem::zeroed();
+                    let hdc: HDC = BeginPaint(window, &mut ps);
 
-                _ = EndPaint(window, &ps);
+                    _ = EndPaint(window, &ps);
 
-                return LRESULT(0);
-            }
-
-            wm::WM_CLOSE => {
-                if let Some(exit_code) = form.quit_on_close {
-                    debug!("WM_CLOSE: posting quit message");
-                    post_quit_message(exit_code);
-                } else {
-                    debug!("WM_CLOSE: not posting quit message");
-                }
-            }
-
-            wm::WM_DESTROY => {
-                debug!("WM_DESTROY");
-                return LRESULT(0);
-            }
-
-            wm::WM_GETMINMAXINFO => {
-                let min_max: *mut MINMAXINFO = lparam.0 as *mut MINMAXINFO;
-                min_max.write(MINMAXINFO {
-                    ptMinTrackSize: POINT { x: 400, y: 400 },
-                    ptMaxTrackSize: POINT { x: 10000, y: 10000 },
-                    ..Default::default()
-                });
-                return LRESULT(0);
-            }
-
-            wm::WM_SIZE => {
-                let new_width = (lparam.0 & 0xffff) as u32;
-                let new_height = ((lparam.0 >> 16) & 0xffff) as u32;
-                debug!("WM_SIZE: {} x {}", new_width, new_height);
-
-                if let Some(sb) = form.status_bar.take() {
-                    form.status_bar.set(Some(sb.clone()));
-                    SendMessageW(sb.handle(), WM_SIZE, None, None);
+                    return LRESULT(0);
                 }
 
-                form.invalidate_layout();
-                form.ensure_layout_valid();
-
-                // TODO: is this now redundant, due to layout?
-                if let Some(ref mdi_client) = form.mdi_client {
-                    debug!("setting MDI client size to {} x {}", new_width, new_height);
-                    _ = SetWindowPos(
-                        mdi_client.control.handle(),
-                        None,
-                        0,
-                        0,
-                        new_width as i32,
-                        new_height as i32,
-                        SWP_NOZORDER,
-                    );
-                }
-
-                // return 0;
-            }
-
-            wm::WM_COMMAND => {
-                // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
-
-                let control = ControlId(wparam_loword(wparam));
-                let command = Command(wparam_hiword(wparam) as u32);
-
-                match command.0 {
-                    wm::BN_CLICKED => {
-                        debug!("BN_CLICKED");
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ButtonClicked,
-                        });
-                    }
-
-                    wm::EN_CHANGE => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::EditChange,
-                        });
-                    }
-
-                    wm::BN_SETFOCUS | wm::EN_SETFOCUS => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::SetFocus,
-                        });
-                    }
-
-                    wm::BN_KILLFOCUS | wm::EN_KILLFOCUS => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::LostFocus,
-                        });
-                    }
-
-                    _ => {
-                        debug!("unrecognized WM_COMMAND code: {:#4x}", command.0);
+                wm::WM_CLOSE => {
+                    if let Some(exit_code) = form.quit_on_close {
+                        debug!("WM_CLOSE: posting quit message");
+                        post_quit_message(exit_code);
+                    } else {
+                        debug!("WM_CLOSE: not posting quit message");
                     }
                 }
 
-                if let Some(handler) = form.command_handler.get() {
-                    handler(control, command);
-                } else {
-                    debug!("WM_COMMAND: no handler is installed");
+                wm::WM_DESTROY => {
+                    debug!("WM_DESTROY");
+                    return LRESULT(0);
                 }
-            }
 
-            // WM_NOTIFY is used by most of the Common Controls to communicate
-            // with the app.
-            // https://docs.microsoft.com/en-us/windows/win32/controls/wm-notify
-            wm::WM_NOTIFY => {
-                let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
-                let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
-                let notify_code = (*nmhdr_ptr).code;
-                // let notify = Notify::from_nmhdr(nmhdr_ptr);
+                wm::WM_GETMINMAXINFO => {
+                    let min_max: *mut MINMAXINFO = lparam.0 as *mut MINMAXINFO;
+                    min_max.write(MINMAXINFO {
+                        ptMinTrackSize: POINT { x: 400, y: 400 },
+                        ptMaxTrackSize: POINT { x: 10000, y: 10000 },
+                        ..Default::default()
+                    });
+                    return LRESULT(0);
+                }
 
-                let control: ControlId = ControlId(wparam.0 as u16);
+                wm::WM_SIZE => {
+                    let new_width = (lparam.0 & 0xffff) as u32;
+                    let new_height = ((lparam.0 >> 16) & 0xffff) as u32;
+                    debug!("WM_SIZE: {} x {}", new_width, new_height);
 
-                use windows::Win32::UI::Controls as controls;
+                    if let Some(sb) = form.status_bar.take() {
+                        form.status_bar.set(Some(sb.clone()));
+                        SendMessageW(sb.handle(), WM_SIZE, None, None);
+                    }
 
-                // For some notifications, we need to handle the notification directly.
-                match notify_code {
-                    TCN_SELCHANGE => {
-                        let tab_controls = form.tab_controls.borrow();
-                        for weak_tab_control in tab_controls.iter() {
-                            if let Some(tab_control) = weak_tab_control.upgrade() {
-                                // TODO: check that this is the right tab control
-                                tab_control.sync_visible();
+                    form.invalidate_layout();
+                    form.ensure_layout_valid();
+
+                    // TODO: is this now redundant, due to layout?
+                    if let Some(ref mdi_client) = form.mdi_client {
+                        debug!("setting MDI client size to {} x {}", new_width, new_height);
+                        _ = SetWindowPos(
+                            mdi_client.control.handle(),
+                            None,
+                            0,
+                            0,
+                            new_width as i32,
+                            new_height as i32,
+                            SWP_NOZORDER,
+                        );
+                    }
+
+                    // return 0;
+                }
+
+                wm::WM_COMMAND => {
+                    // https://docs.microsoft.com/en-us/windows/win32/menurc/wm-command
+
+                    let control = ControlId(wparam_loword(wparam));
+                    let command = Command(wparam_hiword(wparam) as u32);
+
+                    let notify = match command.0 {
+                        wm::BN_CLICKED => Notify::ButtonClicked,
+                        wm::EN_CHANGE => Notify::EditChange,
+                        wm::BN_SETFOCUS | wm::EN_SETFOCUS => Notify::SetFocus,
+                        wm::BN_KILLFOCUS | wm::EN_KILLFOCUS => Notify::LostFocus,
+                        _ => {
+                            debug!("unrecognized WM_COMMAND code: {:#4x}", command.0);
+                            break 'goto_default;
+                        }
+                    };
+
+                    if let Some(handler) = form.borrow_handler() {
+                        handler.notify(control, notify);
+                    }
+                }
+
+                // WM_NOTIFY is used by most of the Common Controls to communicate
+                // with the app.
+                // https://docs.microsoft.com/en-us/windows/win32/controls/wm-notify
+                wm::WM_NOTIFY => {
+                    let nmhdr_ptr: *mut NMHDR = lparam.0 as *mut NMHDR;
+                    let hwnd_from: HWND = (*nmhdr_ptr).hwndFrom;
+                    let notify_code = (*nmhdr_ptr).code;
+                    // let notify = Notify::from_nmhdr(nmhdr_ptr);
+
+                    let control: ControlId = ControlId(wparam.0 as u16);
+
+                    use windows::Win32::UI::Controls as controls;
+
+                    let Some(handler) = form.borrow_handler() else {
+                        break 'goto_default;
+                    };
+
+                    // For some notifications, we need to handle the notification directly.
+                    let notify = match notify_code {
+                        TCN_SELCHANGE => {
+                            let tab_controls = form.tab_controls.borrow();
+                            for weak_tab_control in tab_controls.iter() {
+                                if let Some(tab_control) = weak_tab_control.upgrade() {
+                                    // TODO: check that this is the right tab control
+                                    tab_control.sync_visible();
+                                }
+                            }
+                            Notify::TabSelectionChanged
+                        }
+
+                        // Used for ListView, TreeView
+                        // https://learn.microsoft.com/en-us/windows/win32/controls/nm-click-list-view
+                        controls::NM_CLICK => {
+                            let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
+                            Notify::ItemClick {
+                                item: details.iItem,
+                                subitem: details.iSubItem,
                             }
                         }
-                    }
 
-                    // Used for ListView, TreeView
-                    // https://learn.microsoft.com/en-us/windows/win32/controls/nm-click-list-view
-                    controls::NM_CLICK => {
-                        let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ItemClick {
+                        // Used for ListView, TreeView
+                        // https://learn.microsoft.com/en-us/windows/win32/controls/nm-dblclk-list-view
+                        controls::NM_DBLCLK => {
+                            let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
+                            Notify::ItemDoubleClick {
                                 item: details.iItem,
                                 subitem: details.iSubItem,
-                            },
-                        });
-                    }
-
-                    // Used for ListView, TreeView
-                    // https://learn.microsoft.com/en-us/windows/win32/controls/nm-dblclk-list-view
-                    controls::NM_DBLCLK => {
-                        let details: &NMITEMACTIVATE = &*(lparam.0 as *const NMITEMACTIVATE);
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ItemDoubleClick {
-                                item: details.iItem,
-                                subitem: details.iSubItem,
-                            },
-                        });
-                    }
-
-                    controls::LVN_COLUMNCLICK => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ListColumnClick,
-                        });
-                    }
-
-                    controls::LVN_ITEMCHANGED => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ListItemChanged,
-                        });
-                    }
-
-                    controls::LVN_ITEMACTIVATE => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::ListItemActivate,
-                        });
-                    }
-
-                    controls::NM_RETURN => {
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::Return,
-                        });
-                    }
-
-                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemchanged
-                    controls::TVN_ITEMCHANGED => {
-                        let item_change: &NMTVITEMCHANGE = &*(lparam.0 as *const NMTVITEMCHANGE);
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::TreeItemChanged,
-                        });
-                    }
-
-                    // TreeView - TVN_ITEMEXPANDED
-                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemexpanded
-                    controls::TVN_ITEMEXPANDED => {
-                        let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::TreeItemExpanded,
-                        });
-                    }
-
-                    // TreeView - TVN_SELCHANGED
-                    // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-selchanged
-                    controls::TVN_SELCHANGED => {
-                        let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
-                        app.state.push_event(AppEvent::Notify {
-                            control,
-                            notify: Notify::TreeItemSelectionChanged,
-                        });
-                    }
-
-                    _ => {}
-                }
-
-                /*
-                if let Some(handler) = state.notify_handler.get() {
-                    handler(&notify);
-                } else {
-                    debug!("no WM_NOTIFY handler installed");
-                }
-                */
-
-                return LRESULT(0);
-            }
-
-            // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
-            wm::WM_SIZING => {
-                let (min_width, min_height) = form.layout_min_size.get();
-                let window_size: &mut RECT = &mut *(lparam.0 as *mut RECT);
-                let height = window_size.bottom - window_size.top;
-
-                // TODO: These adjustments are made to the non-client area,
-                // not to the client area.
-                let mut adjusted_rect = RECT {
-                    top: 0,
-                    left: 0,
-                    right: min_width,
-                    bottom: min_height,
-                };
-
-                let window_style = WINDOW_STYLE(GetWindowLongW(window, GWL_STYLE) as u32);
-
-                _ = AdjustWindowRect(&mut adjusted_rect, window_style, false);
-                let min_width = adjusted_rect.right - adjusted_rect.left;
-                let min_height = adjusted_rect.bottom - adjusted_rect.top;
-
-                // If the width is too small, resist!
-                let width = window_size.right - window_size.left;
-                if width < min_width {
-                    match wparam.0 as u32 {
-                        WMSZ_RIGHT | WMSZ_TOPRIGHT | WMSZ_BOTTOMRIGHT => {
-                            window_size.right = window_size.left + min_width;
+                            }
                         }
-                        WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT => {
-                            window_size.left = window_size.right - min_width;
+
+                        controls::LVN_COLUMNCLICK => Notify::ListColumnClick,
+                        controls::LVN_ITEMCHANGED => Notify::ListItemChanged,
+                        controls::LVN_ITEMACTIVATE => Notify::ListItemActivate,
+                        controls::NM_RETURN => Notify::Return,
+
+                        // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemchanged
+                        controls::TVN_ITEMCHANGED => {
+                            let item_change: &NMTVITEMCHANGE =
+                                &*(lparam.0 as *const NMTVITEMCHANGE);
+                            Notify::TreeItemChanged
                         }
-                        _ => {}
+
+                        // TreeView - TVN_ITEMEXPANDED
+                        // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-itemexpanded
+                        controls::TVN_ITEMEXPANDED => {
+                            let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
+                            Notify::TreeItemExpanded
+                        }
+
+                        // TreeView - TVN_SELCHANGED
+                        // https://learn.microsoft.com/en-us/windows/win32/controls/tvn-selchanged
+                        controls::TVN_SELCHANGED => {
+                            let item_change: &NMTREEVIEWW = &*(lparam.0 as *const NMTREEVIEWW);
+                            Notify::TreeItemSelectionChanged
+                        }
+
+                        _ => {
+                            debug!("WM_NOTIFY: notify code is not recognized: notify = {notify_code:#04x}");
+                            break 'goto_default;
+                        }
+                    };
+
+                    handler.notify(control, notify);
+
+                    /*
+                    if let Some(handler) = state.notify_handler.get() {
+                        handler(&notify);
+                    } else {
+                        debug!("no WM_NOTIFY handler installed");
+                    }
+                    */
+
+                    return LRESULT(0);
+                }
+
+                // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-sizing
+                wm::WM_SIZING => {
+                    let (min_width, min_height) = form.layout_min_size.get();
+                    let window_size: &mut RECT = &mut *(lparam.0 as *mut RECT);
+                    let height = window_size.bottom - window_size.top;
+
+                    // TODO: These adjustments are made to the non-client area,
+                    // not to the client area.
+                    let mut adjusted_rect = RECT {
+                        top: 0,
+                        left: 0,
+                        right: min_width,
+                        bottom: min_height,
+                    };
+
+                    let window_style = WINDOW_STYLE(GetWindowLongW(window, GWL_STYLE) as u32);
+
+                    _ = AdjustWindowRect(&mut adjusted_rect, window_style, false);
+                    let min_width = adjusted_rect.right - adjusted_rect.left;
+                    let min_height = adjusted_rect.bottom - adjusted_rect.top;
+
+                    // If the width is too small, resist!
+                    let width = window_size.right - window_size.left;
+                    if width < min_width {
+                        match wparam.0 as u32 {
+                            WMSZ_RIGHT | WMSZ_TOPRIGHT | WMSZ_BOTTOMRIGHT => {
+                                window_size.right = window_size.left + min_width;
+                            }
+                            WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT => {
+                                window_size.left = window_size.right - min_width;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // If the height is too small, resist!
+                    if height < min_height {
+                        window_size.bottom = window_size.top + min_height;
+                        match wparam.0 as u32 {
+                            WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT => {
+                                window_size.top = window_size.bottom - min_height;
+                            }
+                            WMSZ_BOTTOM | WMSZ_BOTTOMLEFT | WMSZ_BOTTOMRIGHT => {
+                                window_size.bottom = window_size.top + min_height;
+                            }
+                            _ => {}
+                        }
                     }
                 }
 
-                // If the height is too small, resist!
-                if height < min_height {
-                    window_size.bottom = window_size.top + min_height;
-                    match wparam.0 as u32 {
-                        WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT => {
-                            window_size.top = window_size.bottom - min_height;
-                        }
-                        WMSZ_BOTTOM | WMSZ_BOTTOMLEFT | WMSZ_BOTTOMRIGHT => {
-                            window_size.bottom = window_size.top + min_height;
-                        }
-                        _ => {}
+                // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
+                wm::WM_CTLCOLORSTATIC => {
+                    let hdc = HDC(wparam.0 as _);
+                    let brush = form.background_brush.borrow();
+                    if let Some(brush) = brush.as_ref() {
+                        let hbrush = brush.handle();
+                        SelectObject(hdc, HGDIOBJ(hbrush.0));
+                        SetBkColor(hdc, COLORREF(form.background_color.get().as_u32()));
+                        return LRESULT(hbrush.0 as _);
+                    }
+
+                    return LRESULT(0);
+                }
+
+                wm::WM_ERASEBKGND => {
+                    let mut client_rect: RECT = zeroed();
+                    _ = GetClientRect(window, &mut client_rect);
+                    let hdc = HDC(wparam.0 as _);
+                    let brush = form.background_brush.borrow();
+                    if let Some(brush) = brush.as_ref() {
+                        let hbrush = brush.handle();
+                        _ = FillRect(hdc, &client_rect, hbrush);
+                        return LRESULT(hbrush.0 as _);
                     }
                 }
-            }
 
-            // https://docs.microsoft.com/en-us/windows/win32/controls/wm-ctlcolorstatic
-            wm::WM_CTLCOLORSTATIC => {
-                let hdc = HDC(wparam.0 as _);
-                let brush = form.background_brush.borrow();
-                if let Some(brush) = brush.as_ref() {
-                    let hbrush = brush.handle();
-                    SelectObject(hdc, HGDIOBJ(hbrush.0));
-                    SetBkColor(hdc, COLORREF(form.background_color.get().as_u32()));
-                    return LRESULT(hbrush.0 as _);
+                // MDI frame events
+                wm::WM_CHILDACTIVATE => {
+                    debug!("WM_CHILDACTIVATE");
                 }
 
-                return LRESULT(0);
-            }
-
-            wm::WM_ERASEBKGND => {
-                let mut client_rect: RECT = zeroed();
-                _ = GetClientRect(window, &mut client_rect);
-                let hdc = HDC(wparam.0 as _);
-                let brush = form.background_brush.borrow();
-                if let Some(brush) = brush.as_ref() {
-                    let hbrush = brush.handle();
-                    _ = FillRect(hdc, &client_rect, hbrush);
-                    return LRESULT(hbrush.0 as _);
+                wm::WM_MDIACTIVATE => {
+                    debug!("WM_MDIACTIVATE");
                 }
-            }
 
-            // MDI frame events
-            wm::WM_CHILDACTIVATE => {
-                debug!("WM_CHILDACTIVATE");
-            }
-
-            wm::WM_MDIACTIVATE => {
-                debug!("WM_MDIACTIVATE");
-            }
-
-            _ => {
-                // allow default to run
+                _ => {
+                    // allow default to run
+                }
             }
         }
+
+        // <-- break 'goto_default will go here
 
         match form.mdi_mode {
             MdiMode::Child => DefMDIChildProcW(window, message, wparam, lparam),

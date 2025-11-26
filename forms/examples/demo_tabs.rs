@@ -101,17 +101,26 @@ pub fn main() {
         ],
     }));
 
-    {
-        let tab_control = tab_control.clone();
-        form.command_handler(move |control, command| match (control, command) {
-            (IDC_TABS, Command::ButtonClicked) => {}
-            (IDC_ADD_TAB, Command::ButtonClicked) => {
-                tab_control.add_tab(0, "foo");
-            }
-            (IDC_DELETE_TAB, Command::ButtonClicked) => {}
-            _ => {}
-        });
-    }
+    let _form_of = form.command_handler(FormData { tab_control });
 
     form.show_modal();
+}
+
+struct FormData {
+    tab_control: TabControl,
+}
+
+impl FormHandler for FormData {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        match (control, notify) {
+            (IDC_TABS, Notify::ButtonClicked) => {}
+
+            (IDC_ADD_TAB, Notify::ButtonClicked) => {
+                self.tab_control.add_tab(0, "foo");
+            }
+
+            (IDC_DELETE_TAB, Notify::ButtonClicked) => {}
+            _ => {}
+        }
+    }
 }

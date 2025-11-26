@@ -214,6 +214,8 @@ pub enum Notify {
     // LVN_COLUMNCLICK
     ListColumnClick,
 
+    TabSelectionChanged,
+
     // ListView, TreeView
     ItemClick { item: i32, subitem: i32 },
 

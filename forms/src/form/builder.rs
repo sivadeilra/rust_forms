@@ -23,7 +23,7 @@ impl<'a> FormBuilder<'a> {
         assert!(parent.rc.mdi_mode == MdiMode::Frame);
         assert!(self.mdi_mode == MdiMode::None);
         self.mdi_mode = MdiMode::Child;
-        self.mdi_parent = parent.mdi_client();
+        self.mdi_parent = parent.rc.mdi_client.as_ref();
         self.no_quit_on_close();
         self
     }
@@ -214,7 +214,7 @@ impl<'a> FormBuilder<'a> {
                 background_brush: Default::default(),
                 background_color: Cell::new(ColorRef::from_sys_color(background_sys_color)),
                 status_bar: Cell::new(None),
-                command_handler: Default::default(),
+                command_handler: RefCell::new(None),
                 tab_controls: Default::default(),
                 style,
                 mdi_mode: self.mdi_mode,

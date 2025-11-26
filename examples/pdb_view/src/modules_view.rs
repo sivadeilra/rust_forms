@@ -5,10 +5,16 @@ use forms::{Button, Edit, GridAxis, GridItem, GridLayout, Layout, Mode, StackLay
 use super::*;
 
 pub struct ModulesForm {
-    #[allow(dead_code)]
-    pub form: Form,
+    pub form: Weak<Form>,
     pub list_view: ListView,
     pub search_text: Edit,
+}
+
+control_ids! {
+    // ModulesForm
+    IDC_MODULES_SEARCH_BUTTON,
+    IDC_MODULES_SEARCH_EDIT,
+    IDC_MODULES_LIST_VIEW,
 }
 
 pub const MODULES_COLUMN_ID: u32 = 0;
@@ -16,7 +22,7 @@ pub const MODULES_COLUMN_OBJECT_FILE: u32 = 1;
 pub const MODULES_COLUMN_MODULE_NAME: u32 = 2;
 
 impl ModulesForm {
-    pub fn new(parent: &Form) -> Self {
+    pub fn new(parent: &Form) -> FormOf<Self> {
         let form = parent
             .app()
             .form_builder()
@@ -49,6 +55,8 @@ impl ModulesForm {
                 .control(&search_button),
         );
 
+        let form = Rc::new(form);
+
         form.set_layout(Layout::Grid(GridLayout {
             rows: GridAxis::new().fixed(50).auto().fixed(50),
             cols: GridAxis::new().auto_min(300).fixed(200),
@@ -58,11 +66,11 @@ impl ModulesForm {
             ],
         }));
 
-        ModulesForm {
-            form,
+        form.command_handler(ModulesForm {
+            form: Rc::downgrade(&form),
             list_view,
             search_text,
-        }
+        })
     }
 
     pub fn load_pdb(&mut self, pdb: &PdbKen) -> Result<()> {
@@ -133,5 +141,22 @@ impl ModulesForm {
         self.list_view.set_all_selected(false);
         self.list_view.set_item_selected(found, true);
         self.list_view.ensure_visible(found);
+    }
+}
+
+impl FormHandler for ModulesForm {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        match (control, notify) {
+            (IDC_MODULES_SEARCH_BUTTON, Notify::ButtonClicked) => {
+                self.on_search();
+            }
+
+            (IDC_MODULES_LIST_VIEW, Notify::ItemDoubleClick { item, subitem }) => {
+                debug!(item, subitem, "double-click");
+                // self.on_modules_list_double_click();
+            }
+
+            _ => {}
+        }
     }
 }

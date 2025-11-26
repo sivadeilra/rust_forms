@@ -4,6 +4,10 @@ use windows::core::w;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 
 pub struct TabControl {
+    inner: Rc<TabControlInner>,
+}
+
+pub(crate) struct TabControlInner {
     control: Rc<ControlState>,
     tabs: RefCell<Vec<Tab>>,
 }
@@ -38,12 +42,18 @@ impl core::ops::Deref for TabPane {
 impl core::ops::Deref for TabControl {
     type Target = Rc<ControlState>;
     fn deref(&self) -> &Rc<ControlState> {
+        &self.inner.control
+    }
+}
+impl core::ops::Deref for TabControlInner {
+    type Target = Rc<ControlState>;
+    fn deref(&self) -> &Rc<ControlState> {
         &self.control
     }
 }
 
 impl TabControl {
-    pub fn new(parent: &Form) -> Rc<Self> {
+    pub fn new(parent: &Form) -> Self {
         register_class_lazy();
 
         let parent_window = Rc::clone(parent);
@@ -68,13 +78,13 @@ impl TabControl {
             )
             .unwrap();
 
-            let rc = Rc::new(Self {
+            let inner = Rc::new(TabControlInner {
                 control: ControlState::new(hwnd, Some(parent_window)),
                 tabs: RefCell::new(Vec::new()),
             });
 
             if true {
-                let tab_control_ptr: *const TabControl = &*rc;
+                let tab_control_ptr: *const TabControlInner = &*inner;
 
                 _ = SetWindowSubclass(
                     hwnd,
@@ -84,9 +94,13 @@ impl TabControl {
                 );
             }
 
-            parent.rc.tab_controls.borrow_mut().push(Rc::downgrade(&rc));
+            parent
+                .rc
+                .tab_controls
+                .borrow_mut()
+                .push(Rc::downgrade(&inner));
 
-            rc
+            TabControl { inner }
         }
     }
 
@@ -118,7 +132,7 @@ impl TabControl {
             item.pszText = PWSTR(label_wstr.as_ptr() as *mut _);
 
             _ = SendMessageW(
-                self.control.handle(),
+                self.inner.control.handle(),
                 TCM_INSERTITEM,
                 Some(WPARAM(item_index as usize)),
                 Some(LPARAM(&item as *const TCITEMW as isize)),
@@ -127,11 +141,11 @@ impl TabControl {
             let pane = Rc::new(TabPane {
                 layout: Default::default(),
                 layout_is_valid: Cell::new(false),
-                control: ControlState::new(tab_hwnd, Some(self.control.clone())),
+                control: ControlState::new(tab_hwnd, Some(self.inner.control.clone())),
             });
 
             {
-                let mut tabs = self.tabs.borrow_mut();
+                let mut tabs = self.inner.tabs.borrow_mut();
                 tabs.push(Tab {
                     hwnd: tab_hwnd,
                     pane: Rc::clone(&pane),
@@ -151,6 +165,12 @@ impl TabControl {
         }
     }
 
+    pub fn sync_visible(&self) {
+        self.inner.sync_visible();
+    }
+}
+
+impl TabControlInner {
     pub fn sync_visible(&self) {
         unsafe {
             debug!("TabControl::sync_visible");
@@ -298,7 +318,7 @@ unsafe extern "system" fn tab_control_subclass_proc(
     ref_data: usize,
 ) -> LRESULT {
     assert!(!ref_data != 0);
-    let this: &TabControl = &*(ref_data as *const TabControl);
+    let this: &TabControlInner = &*(ref_data as *const TabControlInner);
 
     let result = DefSubclassProc(hwnd, message, wparam, lparam);
 

@@ -66,36 +66,55 @@ pub fn main() {
         ],
     }));
 
-    {
-        let lv = lv.clone();
-        form.command_handler(move |control, command| match (control, command) {
-            (IDC_MODE_DETAILS, Command::ButtonClicked) => {
-                lv.set_mode(Mode::Details);
-            }
-            (IDC_MODE_ICONS, Command::ButtonClicked) => {
-                lv.set_mode(Mode::Icon);
-            }
-            (IDC_ADD_ITEM, Command::ButtonClicked) => {
-                let name = format!("item #{}", lv.items_len());
-                lv.insert_item(&name);
-            }
-            (IDC_DELETE_ITEM, Command::ButtonClicked) => {
-                let selected_items: Vec<usize> = lv.iter_selected_items().collect();
-                for selected_item in selected_items {
-                    lv.delete_item(selected_item);
-                }
-            }
-            (IDC_FULL_ROW_SELECT, Command::ButtonClicked) => {
-                lv.set_full_row_select(full_row_select.is_checked());
-            }
-            (IDC_CHECKBOXES, Command::ButtonClicked) => {
-                lv.set_check_boxes(checkboxes_button.is_checked())
-            }
-            (IDC_GRIDLINES, Command::ButtonClicked) => {}
-
-            _ => {}
-        });
-    }
+    let _form_of = form.command_handler(FormData {
+        list_view: lv.clone(),
+        full_row_select,
+        checkboxes_button,
+    });
 
     form.show_modal();
+}
+
+struct FormData {
+    list_view: ListView,
+    full_row_select: Button,
+    checkboxes_button: Button,
+}
+
+impl FormHandler for FormData {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        match (control, notify) {
+            (IDC_MODE_DETAILS, Notify::ButtonClicked) => {
+                self.list_view.set_mode(Mode::Details);
+            }
+
+            (IDC_MODE_ICONS, Notify::ButtonClicked) => {
+                self.list_view.set_mode(Mode::Icon);
+            }
+
+            (IDC_ADD_ITEM, Notify::ButtonClicked) => {
+                let name = format!("item #{}", self.list_view.items_len());
+                self.list_view.insert_item(&name);
+            }
+
+            (IDC_DELETE_ITEM, Notify::ButtonClicked) => {
+                let selected_items: Vec<usize> = self.list_view.iter_selected_items().collect();
+                for selected_item in selected_items {
+                    self.list_view.delete_item(selected_item);
+                }
+            }
+
+            (IDC_FULL_ROW_SELECT, Notify::ButtonClicked) => {
+                self.list_view
+                    .set_full_row_select(self.full_row_select.is_checked());
+            }
+
+            (IDC_CHECKBOXES, Notify::ButtonClicked) => self
+                .list_view
+                .set_check_boxes(self.checkboxes_button.is_checked()),
+
+            (IDC_GRIDLINES, Notify::ButtonClicked) => {}
+            _ => {}
+        }
+    }
 }

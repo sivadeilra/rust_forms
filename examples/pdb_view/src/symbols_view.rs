@@ -17,6 +17,8 @@ pub struct SymbolsForm {
     list_view: ListView,
     module_filter_edit: Edit,
     symbol_name_filter_edit: Edit,
+
+    pdb: Rc<RefCell<Option<PdbKen>>>,
 }
 
 // const COLUMN_ID: u32 = 0;
@@ -27,7 +29,7 @@ const COLUMN_KIND: u32 = 4;
 const COLUKN_NAME: u32 = 5;
 
 impl SymbolsForm {
-    pub fn new(parent: &Form) -> Self {
+    pub fn new(parent: &Form, pdb: Rc<RefCell<Option<PdbKen>>>) -> Self {
         let form = parent
             .app()
             .form_builder()
@@ -86,10 +88,17 @@ impl SymbolsForm {
             list_view,
             module_filter_edit,
             symbol_name_filter_edit,
+            pdb,
         }
     }
 
-    pub fn on_search(&mut self, pdb: &mut PdbKen) -> Result<()> {
+    fn on_search(&mut self) -> Result<()> {
+        let mut pdb = self.pdb.try_borrow_mut()?;
+
+        let Some(pdb) = pdb.as_mut() else {
+            return Ok(());
+        };
+
         let module_filter = self.module_filter_edit.get_text();
         let module_filter = module_filter.trim_ascii();
 
@@ -239,5 +248,16 @@ impl SymbolsForm {
         self.list_view.set_visible(true);
 
         Ok(())
+    }
+}
+
+impl FormHandler for SymbolsForm {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        match (control, notify) {
+            (IDC_SYMBOLS_SEARCH_BUTTON, Notify::ButtonClicked) => {
+                _ = self.on_search();
+            }
+            _ => {}
+        }
     }
 }

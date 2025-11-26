@@ -3,7 +3,7 @@ use crate::dbg::message_str;
 use crate::msg::Msg;
 use core::mem::{size_of, zeroed};
 use core::ptr::null_mut;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefMut};
 use std::ops::Deref;
 use std::sync::{Once, OnceLock};
 use tracing::debug;
@@ -19,6 +19,25 @@ pub use builder::*;
 /// A top-level window.
 pub struct Form {
     pub(crate) rc: Rc<FormState>,
+}
+
+pub struct FormOf<T> {
+    form: Form,
+    handler: Rc<FormHandlerPoly<T>>,
+}
+
+impl<T> Deref for FormOf<T> {
+    type Target = Form;
+
+    fn deref(&self) -> &Self::Target {
+        &self.form
+    }
+}
+
+impl<T> FormOf<T> {
+    pub fn cell(&self) -> &RefCell<T> {
+        &self.handler.cell
+    }
 }
 
 pub struct MdiClient {
@@ -63,12 +82,39 @@ pub(crate) struct FormState {
     pub(crate) background_brush: RefCell<Option<Brush>>,
     pub(crate) background_color: Cell<ColorRef>,
 
-    command_handler: OnceCell<Box<dyn Fn(ControlId, Command)>>,
+    command_handler: RefCell<Option<Weak<dyn FormHandlerP + 'static>>>,
 
     status_bar: Cell<Option<StatusBar>>,
 
-    pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControl>>>,
+    pub(crate) tab_controls: RefCell<Vec<std::rc::Weak<TabControlInner>>>,
 }
+
+pub trait FormHandler {
+    fn notify(&mut self, control: ControlId, notify: Notify) {}
+}
+
+trait FormHandlerP {
+    fn notify(&self, control: ControlId, notify: Notify);
+}
+
+struct FormHandlerPoly<T> {
+    cell: RefCell<T>,
+}
+
+impl<T: FormHandler + 'static> FormHandlerP for FormHandlerPoly<T> {
+    fn notify(&self, control: ControlId, notify: Notify) {
+        if let Ok(mut b) = self.cell.try_borrow_mut() {
+            b.notify(control, notify);
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct NullHandler;
+
+impl FormHandler for NullHandler {}
+
+static_assertions::assert_obj_safe!(FormHandler);
 
 assert_not_impl_any!(Form: Send, Sync);
 
@@ -175,29 +221,34 @@ impl Form {
         }
     }
 
-    pub fn command_handler<F>(&self, handler: F)
+    #[must_use]
+    pub fn command_handler<T>(&self, handler: T) -> FormOf<T>
     where
-        F: Fn(ControlId, Command) + 'static,
+        T: FormHandler + 'static,
     {
-        let result = self.rc.command_handler.set(Box::new(handler));
-        assert!(
-            result.is_ok(),
-            "cannot call command_handler() more than once"
-        );
-    }
+        // command_handler: RefCell<Weak<dyn FormHandlerP + 'static>>,
 
-    /*
-    pub fn notify_handler<F>(&self, handler: F)
-    where
-        F: Fn(&Notify) + 'static,
-    {
-        let result = self.rc.notify_handler.set(Box::new(handler));
-        assert!(
-            result.is_ok(),
-            "cannot call notify_handler() more than once"
-        );
+        let poly = FormHandlerPoly {
+            cell: RefCell::new(handler),
+        };
+
+        let rc_poly: Rc<FormHandlerPoly<T>> = Rc::new(poly);
+        let rc_poly_clone: Rc<FormHandlerPoly<T>> = Rc::clone(&rc_poly);
+        let rc_poly_dyn: Rc<dyn FormHandlerP> = rc_poly_clone;
+        let weak_poly_dyn: Weak<dyn FormHandlerP> = Rc::downgrade(&rc_poly_dyn);
+
+        {
+            let mut handler_guard = self.rc.command_handler.borrow_mut();
+            *handler_guard = Some(weak_poly_dyn);
+        }
+
+        FormOf {
+            form: Form {
+                rc: Rc::clone(&self.rc),
+            },
+            handler: rc_poly,
+        }
     }
-    */
 
     pub fn mdi_client(&self) -> Option<&MdiClient> {
         self.rc.mdi_client.as_ref()
@@ -263,6 +314,12 @@ impl FormState {
                 warn!("failed to get client rect");
             }
         }
+    }
+
+    #[inline(never)]
+    fn borrow_handler(&self) -> Option<Rc<dyn FormHandlerP + 'static>> {
+        let handler = self.command_handler.try_borrow().ok()?;
+        handler.as_ref()?.upgrade()
     }
 }
 

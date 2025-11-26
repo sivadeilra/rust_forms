@@ -4,8 +4,6 @@ use regex::Regex;
 use std::rc::Rc;
 use std::sync::mpsc;
 
-use tracing::debug;
-
 mod worker;
 use worker::*;
 
@@ -102,10 +100,34 @@ fn main() {
         ],
     }));
 
-    {
+    // Start our worker thread.
+
+    let response_tx = app.messenger.register_receiver_func("worker", {
         let app = app.clone();
-        form.command_handler(move |control, command| match (control, command) {
-            (CONTROL_ID_QUERY_BUTTON, Command::ButtonClicked) => {
+        move |message: WorkerResponse| {
+            app.handle_worker_response(message);
+        }
+    });
+
+    form.command_handler(MainFormData { app });
+
+    let _worker = std::thread::spawn(move || {
+        worker_thread(commands_receiver, response_tx);
+    });
+
+    form.show_modal();
+}
+
+struct MainFormData {
+    app: Rc<AppState>,
+}
+
+impl FormHandler for MainFormData {
+    fn notify(&mut self, control: ControlId, notify: Notify) {
+        let app = &self.app;
+
+        match (control, notify) {
+            (CONTROL_ID_QUERY_BUTTON, Notify::ButtonClicked) => {
                 let root_directory = app.root_directory.get_text();
                 let regex_text = app.regex.get_text();
                 match Regex::new(&regex_text) {
@@ -127,26 +149,9 @@ fn main() {
                     }
                 }
             }
-            (id, cmd) => {
-                debug!(?id, ?cmd, "command not recognized");
-            }
-        });
-    }
-
-    // Start our worker thread.
-
-    let response_tx = app.messenger.register_receiver_func("worker", {
-        let app = app.clone();
-        move |message: WorkerResponse| {
-            app.handle_worker_response(message);
+            _ => {}
         }
-    });
-
-    let _worker = std::thread::spawn(move || {
-        worker_thread(commands_receiver, response_tx);
-    });
-
-    form.show_modal();
+    }
 }
 
 impl AppState {
